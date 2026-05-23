@@ -2,7 +2,7 @@ import sys
 import argparse
 
 
-def parse_arguments():
+def create_parser():
     parser = argparse.ArgumentParser()
 
     # Configuration toml files
@@ -800,6 +800,11 @@ def parse_arguments():
         help="If provided use the provided csv to modify weights",
     )
 
+    return parser
+
+
+def parse_arguments():
+    parser = create_parser()
     args = parser.parse_args()
 
     explicit_args = {

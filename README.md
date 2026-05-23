@@ -9,6 +9,81 @@ The old scripts and readme have been moved into [scripts_v1](scripts_v1).
 Note that the new naming of metadata follows the convention of [waifuc](https://github.com/deepghs/waifuc) and is thus different from the name given to the older version.
 For conversion please use [utilities/convert_metadata.py](utilities/convert_metadata.py).
 
+## Local Gradio Web UI
+
+The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local workflow editor:
+
+- All CLI settings from `anime2sd/parse_arguments.py` are rendered as controls, grouped by the stage where they take effect.
+- Each control displays the original argument description as inline help text.
+- Stages are selected independently. Stages 1 (frame extraction) and 2 (cropping) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
+- UI profiles can be exported to and imported from TOML. Saved profiles are written beneath `configs/ui/saved/` and intentionally ignored by Git because they commonly contain local paths.
+- Each selected stage is run in sequence through the established `automatic_pipeline.py` implementation using one shared runtime configuration.
+
+The UI listens only on `http://127.0.0.1:7866`. Port `7866` is intentionally fixed for repeatable bookmarks and Pinokio integration. Close another service using that port before launching Frame Lab.
+
+### Windows Quick Start
+
+Use Python 3.10 because the upstream download dependencies do not support Python 3.11 or newer reliably.
+
+```bat
+setup.bat
+launch.bat
+```
+
+`setup.bat` creates `env`, installs the local packages and uses current CUDA 12.8 PyTorch wheels on NVIDIA PCs. This installation route is intended for both an RTX 3090 and an RTX 5070 Ti. Stage 1 additionally requires `ffmpeg` on `PATH`.
+
+### Pinokio Launcher
+
+This repository is an app launcher located under `PINOKIO_HOME/api/anime-screenshot-pipeline-vibe`. In Pinokio:
+
+1. Choose **Install** to create `env` and install the CUDA/CPU dependencies.
+2. Choose **Start** to launch Frame Lab.
+3. When the Gradio server is ready, choose **Open Web UI**.
+4. Use **Update** to pull changes and reinstall dependencies, or **Reset** to remove only the generated virtual environment.
+
+The Pinokio start script captures the local Gradio URL and opens the same fixed local endpoint used by `launch.bat`.
+
+### Programmatic UI Access
+
+First save a profile in the UI, for example `configs/ui/saved/my_pipeline.toml`. The named Gradio endpoint `run_saved_profile` accepts that project-relative profile path and an optional comma-separated stage list.
+
+Python:
+
+```python
+from gradio_client import Client
+
+client = Client("http://127.0.0.1:7866")
+result = client.predict(
+    "configs/ui/saved/my_pipeline.toml",
+    "3,4,5,6,7",
+    api_name="/run_saved_profile",
+)
+print(result)
+```
+
+JavaScript:
+
+```javascript
+import { Client } from "@gradio/client";
+
+const app = await Client.connect("http://127.0.0.1:7866");
+const result = await app.predict("/run_saved_profile", [
+  "configs/ui/saved/my_pipeline.toml",
+  "3,4,5,6,7"
+]);
+console.log(result.data);
+```
+
+Curl:
+
+```bash
+curl -X POST "http://127.0.0.1:7866/call/run_saved_profile" \
+  -H "Content-Type: application/json" \
+  -d '{"data":["configs/ui/saved/my_pipeline.toml","3,4,5,6,7"]}'
+```
+
+The curl response contains an event identifier; consume its streamed result from `GET /call/run_saved_profile/<event_id>`. The original CLI shown below remains available for scripting without a running UI.
+
 
 ## Basic Usage
 
@@ -148,4 +223,9 @@ Contributions are welcome
 - The new workflow is largely inspired by the fully automatic procedure for single character of [narugo1992](https://github.com/narugo1992) and is largely based on the library [waifuc](https://github.com/deepghs/waifuc)
 - The [tag_filtering/overlap_tags.json](tag_filtering/overlap_tags.json) file is provided by gensen2ee
 - See the [old readme](scripts_v1/README.md) as well
+- The Gradio Frame Lab UI and Pinokio launcher additions are documented in [CREDITS.md](CREDITS.md).
+
+## License
+
+This project remains distributed under the MIT License. See [LICENSE](LICENSE) for the copyright notice and terms that apply to the original project and these modifications.
 

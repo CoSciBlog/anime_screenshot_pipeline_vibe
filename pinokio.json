@@ -1,0 +1,10 @@
+{
+  "title": "Anime2SD Frame Lab",
+  "description": "Build anime training datasets with a configurable local Gradio workflow.",
+  "tags": [
+    "dataset",
+    "anime",
+    "gradio",
+    "nvidia"
+  ]
+}

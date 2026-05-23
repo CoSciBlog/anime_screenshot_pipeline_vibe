@@ -11,3 +11,4 @@ pynyaasi==0.0.1
 torrentp==0.1.6
 transformers==4.35.0    # Only used for embedding name checking
 wheel==0.42.0           # For waifuc installation
+gradio>=4.44.1,<6       # Local web UI for configuring and running pipeline stages

@@ -18,8 +18,11 @@ The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local 
 - Stages are selected independently. Stages 1 (frame extraction) and 2 (cropping) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
 - UI profiles can be exported to and imported from TOML. Saved profiles are written beneath `configs/ui/saved/` and intentionally ignored by Git because they commonly contain local paths.
 - Each selected stage is run in sequence through the established `automatic_pipeline.py` implementation using one shared runtime configuration.
+- **Stop pipeline** terminates the currently active pipeline run without closing the web interface.
+- **Shut down server** terminates an active pipeline if necessary and closes the local Gradio server completely.
 
 The UI listens only on `http://127.0.0.1:7866`. Port `7866` is intentionally fixed for repeatable bookmarks and Pinokio integration. Close another service using that port before launching Frame Lab.
+The web UI is tested with Gradio `6.14.0`.
 
 ### Windows Quick Start
 
@@ -37,6 +40,26 @@ All direct Python CLI calls must use this project environment. In PowerShell, ac
 ```powershell
 .\env\Scripts\Activate.ps1
 ```
+
+To install the development/test dependencies and run the focused unit test suite:
+
+```powershell
+.\env\Scripts\python.exe -m uv pip install -r requirements-dev.txt
+.\env\Scripts\python.exe -m pytest -q
+```
+
+The root `pytest.ini` collects the application tests under `tests/` only; the bundled `waifuc` source tree retains its upstream test suite separately. Classification integration tests are skipped unless their local sample-image directories under `data/` are populated.
+
+### Terminal Output
+
+Pipeline logs use severity colors when output is connected to an interactive terminal:
+
+- `INFO` is blue.
+- `WARNING` is yellow.
+- `ERROR` is red.
+- `CRITICAL` is bold red.
+
+Color codes are omitted automatically when output is piped into the Gradio run log or a file. Set `NO_COLOR=1` to disable ANSI coloring in a terminal.
 
 ### Pinokio Launcher
 
@@ -89,6 +112,23 @@ curl -X POST "http://127.0.0.1:7866/call/run_saved_profile" \
 ```
 
 The curl response contains an event identifier; consume its streamed result from `GET /call/run_saved_profile/<event_id>`. The original CLI shown below remains available for scripting without a running UI.
+
+The UI controls are also exposed as named API endpoints:
+
+```python
+client.predict(api_name="/stop_pipeline")
+client.predict(api_name="/shutdown_server")
+```
+
+```javascript
+await app.predict("/stop_pipeline", []);
+await app.predict("/shutdown_server", []);
+```
+
+```bash
+curl -X POST "http://127.0.0.1:7866/call/stop_pipeline" -H "Content-Type: application/json" -d '{"data":[]}'
+curl -X POST "http://127.0.0.1:7866/call/shutdown_server" -H "Content-Type: application/json" -d '{"data":[]}'
+```
 
 
 ## Basic Usage

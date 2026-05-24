@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
+import threading
+import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Iterable
@@ -23,6 +26,10 @@ PORT = 7866
 CONFIG_DIR = ROOT / "configs" / "ui"
 SAVED_CONFIG_DIR = CONFIG_DIR / "saved"
 RUNTIME_CONFIG = SAVED_CONFIG_DIR / "_last_run.toml"
+PIPELINE_PROCESS_LOCK = threading.Lock()
+PIPELINE_RUN_LOCK = threading.Lock()
+PIPELINE_STOP_REQUESTED = threading.Event()
+ACTIVE_PIPELINE_PROCESS: subprocess.Popen[str] | None = None
 
 STAGES = OrderedDict(
     [
@@ -290,6 +297,9 @@ STYLE = """
   background: var(--accent);
   border-color: var(--accent);
 }
+.shutdown-button {
+  margin-top: .8rem;
+}
 .gradio-container a { color: var(--accent); }
 """
 
@@ -418,54 +428,107 @@ def load_configuration(preset: str, uploaded_path: str | None):
     return updates
 
 
+def stop_pipeline() -> str:
+    global ACTIVE_PIPELINE_PROCESS
+    with PIPELINE_PROCESS_LOCK:
+        process = ACTIVE_PIPELINE_PROCESS
+        if process is None or process.poll() is not None:
+            return "No pipeline process is currently running."
+        PIPELINE_STOP_REQUESTED.set()
+        process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+    return "Stopping the active pipeline..."
+
+
+def shutdown_server() -> str:
+    stop_pipeline()
+
+    def exit_process() -> None:
+        time.sleep(0.35)
+        os._exit(0)
+
+    threading.Thread(target=exit_process, daemon=True).start()
+    return "Server shutdown requested. This browser connection will close shortly."
+
+
 def execute_config(stages: list[int], config: dict[str, Any]):
+    global ACTIVE_PIPELINE_PROCESS
     if not stages:
         yield "No stage selected. Enable at least one checkbox."
         return
+    if not PIPELINE_RUN_LOCK.acquire(blocking=False):
+        yield "A pipeline run is already active. Stop it before starting another run."
+        return
 
-    SAVED_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with RUNTIME_CONFIG.open("w", encoding="utf-8") as handle:
-        toml.dump(config, handle)
+    PIPELINE_STOP_REQUESTED.clear()
+    try:
+        SAVED_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        with RUNTIME_CONFIG.open("w", encoding="utf-8") as handle:
+            toml.dump(config, handle)
 
-    history = [
-        f"Runtime configuration: {RUNTIME_CONFIG.relative_to(ROOT)}",
-        f"Stages: {', '.join(str(stage) for stage in stages)}",
-    ]
-    for stage in stages:
-        title = STAGES[stage][0]
-        history.append(f"\n--- Stage {stage}: {title} ---")
-        yield "\n".join(history)
-        command = [
-            sys.executable,
-            str(ROOT / "automatic_pipeline.py"),
-            "--base_config_file",
-            str(RUNTIME_CONFIG),
-            "--start_stage",
-            str(stage),
-            "--end_stage",
-            str(stage),
+        history = [
+            f"Runtime configuration: {RUNTIME_CONFIG.relative_to(ROOT)}",
+            f"Stages: {', '.join(str(stage) for stage in stages)}",
         ]
-        process = subprocess.Popen(
-            command,
-            cwd=ROOT,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-        assert process.stdout is not None
-        for line in process.stdout:
-            history.append(line.rstrip())
-            history = history[-400:]
+        for stage in stages:
+            if PIPELINE_STOP_REQUESTED.is_set():
+                history.append("Pipeline stopped by user.")
+                yield "\n".join(history)
+                return
+            title = STAGES[stage][0]
+            history.append(f"\n--- Stage {stage}: {title} ---")
             yield "\n".join(history)
-        return_code = process.wait()
-        if return_code != 0:
-            history.append(f"Stage {stage} failed with exit code {return_code}.")
-            yield "\n".join(history)
-            return
-        history.append(f"Stage {stage} completed.")
-    history.append("All selected stages completed.")
-    yield "\n".join(history)
+            command = [
+                sys.executable,
+                str(ROOT / "automatic_pipeline.py"),
+                "--base_config_file",
+                str(RUNTIME_CONFIG),
+                "--start_stage",
+                str(stage),
+                "--end_stage",
+                str(stage),
+            ]
+            process = subprocess.Popen(
+                command,
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            with PIPELINE_PROCESS_LOCK:
+                ACTIVE_PIPELINE_PROCESS = process
+            assert process.stdout is not None
+            for line in process.stdout:
+                history.append(line.rstrip())
+                history = history[-400:]
+                yield "\n".join(history)
+            return_code = process.wait()
+            with PIPELINE_PROCESS_LOCK:
+                if ACTIVE_PIPELINE_PROCESS is process:
+                    ACTIVE_PIPELINE_PROCESS = None
+            if PIPELINE_STOP_REQUESTED.is_set():
+                history.append("Pipeline stopped by user.")
+                yield "\n".join(history)
+                return
+            if return_code != 0:
+                history.append(f"Stage {stage} failed with exit code {return_code}.")
+                yield "\n".join(history)
+                return
+            history.append(f"Stage {stage} completed.")
+        history.append("All selected stages completed.")
+        yield "\n".join(history)
+    finally:
+        with PIPELINE_PROCESS_LOCK:
+            process = ACTIVE_PIPELINE_PROCESS
+            ACTIVE_PIPELINE_PROCESS = None
+        if process is not None and process.poll() is None:
+            process.terminate()
+        PIPELINE_STOP_REQUESTED.clear()
+        PIPELINE_RUN_LOCK.release()
 
 
 def run_selected_stages(selected: list[str], *values: Any):
@@ -498,7 +561,7 @@ def make_component(action: argparse.Action, value: Any):
         precision = 0 if action.type is int else None
         return gr.Number(label=label, value=None if shown == "" else shown, precision=precision, info=info)
     if action.nargs in ("*", "+"):
-        return gr.Textbox(label=label, value=shown, lines=2, info=f"{info} Eine Option pro Zeile oder kommasepariert.")
+        return gr.Textbox(label=label, value=shown, lines=2, info=f"{info} Enter one option per line or separate values with commas.")
     return gr.Textbox(label=label, value=shown, info=info)
 
 
@@ -509,7 +572,6 @@ def build_interface() -> gr.Blocks:
     known_fields = {key for keys in grouped.values() for key in keys}
 
     with gr.Blocks(
-        css=STYLE,
         title="Anime2SD Frame Lab",
         elem_classes="workspace",
     ) as demo:
@@ -532,6 +594,7 @@ def build_interface() -> gr.Blocks:
                 )
                 with gr.Row():
                     run_button = gr.Button("Run pipeline", variant="primary")
+                    stop_button = gr.Button("Stop pipeline", variant="stop")
                 output = gr.Textbox(label="Run log", lines=18, interactive=False)
             with gr.Column(scale=1, elem_classes="run-panel"):
                 gr.HTML("<p class='panel-label'>Configuration</p>")
@@ -551,6 +614,7 @@ def build_interface() -> gr.Blocks:
                 save_button = gr.Button("Save configuration")
                 downloaded = gr.File(label="Saved profile", interactive=False)
                 status = gr.Markdown(f"Web interface: `http://127.0.0.1:{PORT}` (fixed port).")
+                shutdown_button = gr.Button("Shut down server", variant="stop", elem_classes="shutdown-button")
 
         gr.HTML("<p class='settings-label'>Settings by stage</p>")
         with gr.Tabs(elem_classes="settings-tabs"):
@@ -594,6 +658,20 @@ def build_interface() -> gr.Blocks:
             inputs=[stage_selector, *controls_in_action_order],
             outputs=output,
             api_name="run_from_form",
+            concurrency_limit=1,
+            concurrency_id="pipeline_run",
+        )
+        stop_button.click(
+            stop_pipeline,
+            outputs=output,
+            api_name="stop_pipeline",
+            concurrency_limit=None,
+        )
+        shutdown_button.click(
+            shutdown_server,
+            outputs=status,
+            api_name="shutdown_server",
+            concurrency_limit=None,
         )
         with gr.Accordion("Programmatic access", open=False):
             gr.Markdown(
@@ -622,4 +700,5 @@ if __name__ == "__main__":
         server_name="127.0.0.1",
         server_port=PORT,
         show_error=True,
+        css=STYLE,
     )

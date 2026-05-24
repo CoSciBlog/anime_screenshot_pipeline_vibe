@@ -1,7 +1,13 @@
 # tests/classif/test_classify_characters.py
 import pytest
 import os
+from pathlib import Path
 from anime2sd.classif.classify_characters import classify_from_directory
+
+
+def require_source_images(directory):
+    if not Path(directory).exists() or not any(item.is_file() for item in Path(directory).rglob("*.*")):
+        pytest.skip(f"Integration fixture images are not available in {directory}.")
 
 
 @pytest.fixture(scope="module")
@@ -17,6 +23,7 @@ def test_data():
     # shutil.copytree('path_to_sample_data', src_dir)
     # shutil.copytree('path_to_sample_ref_images', character_ref_dir)
 
+    require_source_images(src_dir)
     return src_dir, dst_dir, character_ref_dir
 
 
@@ -29,6 +36,7 @@ def test_data_inplace():
     os.makedirs(dst_dir, exist_ok=True)
     character_ref_dir = os.path.join(root_dir, "ref_images", "tearmoon")
 
+    require_source_images(src_dir)
     return src_dir, dst_dir, character_ref_dir
 
 
@@ -41,6 +49,7 @@ def test_data_booru():
     os.makedirs(dst_dir, exist_ok=True)
     character_ref_dir = os.path.join(root_dir, "ref_images", "hikikomari")
 
+    require_source_images(src_dir)
     return src_dir, dst_dir, character_ref_dir
 
 
@@ -53,6 +62,7 @@ def test_data_booru_inplace():
     os.makedirs(dst_dir, exist_ok=True)
     character_ref_dir = os.path.join(root_dir, "ref_images", "hikikomari")
 
+    require_source_images(src_dir)
     return src_dir, dst_dir, character_ref_dir
 
 

@@ -4,6 +4,34 @@ import argparse
 from datetime import datetime
 
 
+class ColorFormatter(logging.Formatter):
+    """Add ANSI severity colors for interactive terminal handlers only."""
+
+    COLORS = {
+        logging.DEBUG: "\033[36m",
+        logging.INFO: "\033[34m",
+        logging.WARNING: "\033[33m",
+        logging.ERROR: "\033[31m",
+        logging.CRITICAL: "\033[1;31m",
+    }
+    RESET = "\033[0m"
+
+    def __init__(self, fmt: str, use_color: bool = False):
+        super().__init__(fmt)
+        self.use_color = use_color
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = super().format(record)
+        if not self.use_color:
+            return message
+        color = self.COLORS.get(record.levelno)
+        return f"{color}{message}{self.RESET}" if color else message
+
+
+def supports_terminal_color(stream) -> bool:
+    return "NO_COLOR" not in os.environ and hasattr(stream, "isatty") and stream.isatty()
+
+
 def setup_logging(log_dir: str, log_prefix: str, logger_name: str):
     """
     Set up logging to file and stdout with specified directory and prefix.
@@ -28,7 +56,10 @@ def setup_logging(log_dir: str, log_prefix: str, logger_name: str):
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
     logger.addHandler(ch)
-    formatter = logging.Formatter(f"{log_prefix} - %(levelname)s - %(message)s")
+    formatter = ColorFormatter(
+        f"{log_prefix} - %(levelname)s - %(message)s",
+        use_color=supports_terminal_color(ch.stream),
+    )
     ch.setFormatter(formatter)
 
     # Create file handler and set level to info

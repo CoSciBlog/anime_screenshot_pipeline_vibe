@@ -6,7 +6,10 @@ module.exports = {
       params: {
         venv: "env",
         path: ".",
-        message: "python app/gradio_ui.py",
+        message: [
+          "python -c \"import gradio; print('Gradio dependency check passed.')\"",
+          "python app/gradio_ui.py"
+        ],
         on: [{
           event: "/(http:\\/\\/[0-9.:]+)/",
           done: true

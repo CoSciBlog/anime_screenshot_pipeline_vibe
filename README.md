@@ -33,7 +33,7 @@ setup.bat
 launch.bat
 ```
 
-`setup.bat` creates `env`, installs the local packages and uses current CUDA 12.8 PyTorch wheels on NVIDIA PCs. This installation route is intended for both an RTX 3090 and an RTX 5070 Ti. Stage 1 additionally requires `ffmpeg` on `PATH`.
+`setup.bat` creates a Python 3.10 `env`, installs the local packages and development test dependencies, runs the application test suite, and uses current CUDA 12.8 PyTorch wheels on NVIDIA PCs. This installation route is intended for both an RTX 3090 and an RTX 5070 Ti. Stage 1 additionally requires `ffmpeg` on `PATH`.
 
 All direct Python CLI calls must use this project environment. In PowerShell, activate it once per terminal session:
 
@@ -41,7 +41,7 @@ All direct Python CLI calls must use this project environment. In PowerShell, ac
 .\env\Scripts\Activate.ps1
 ```
 
-To install the development/test dependencies and run the focused unit test suite:
+To reinstall the development/test dependencies or rerun the verified application suite manually:
 
 ```powershell
 .\env\Scripts\python.exe -m uv pip install -r requirements-dev.txt
@@ -68,9 +68,10 @@ This repository is an app launcher located under `PINOKIO_HOME/api/anime-screens
 1. Choose **Install** to create `env` and install the CUDA/CPU dependencies.
 2. Choose **Start** to launch Frame Lab.
 3. When the Gradio server is ready, choose **Open Web UI**.
-4. Use **Update** to pull changes and reinstall dependencies, or **Reset** to remove only the generated virtual environment.
+4. Choose **Run Tests** to execute the application test suite inside the managed environment.
+5. Use **Update** to pull changes, reinstall dependencies, and rerun verification, or **Reset** to remove only the generated virtual environment.
 
-The Pinokio start script captures the local Gradio URL and opens the same fixed local endpoint used by `launch.bat`.
+The Pinokio start script checks the Gradio dependency before launching, captures the local Gradio URL, and opens the same fixed local endpoint used by `launch.bat`. `launch.bat` reports a direct setup instruction when UI dependencies are missing.
 
 ### Programmatic UI Access
 

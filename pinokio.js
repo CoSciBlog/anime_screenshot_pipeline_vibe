@@ -8,7 +8,8 @@ module.exports = {
       install: info.running("install.js"),
       start: info.running("start.js"),
       update: info.running("update.js"),
-      reset: info.running("reset.js")
+      reset: info.running("reset.js"),
+      test: info.running("test.js")
     }
     if (running.install) {
       return [{
@@ -52,6 +53,13 @@ module.exports = {
           text: "Resetting",
           href: "reset.js"
         }]
+      } else if (running.test) {
+        return [{
+          default: true,
+          icon: "fa-solid fa-terminal",
+          text: "Running Tests",
+          href: "test.js"
+        }]
       }
       return [{
         default: true,
@@ -66,6 +74,10 @@ module.exports = {
         icon: "fa-solid fa-plug",
         text: "Install",
         href: "install.js"
+      }, {
+        icon: "fa-solid fa-flask",
+        text: "Run Tests",
+        href: "test.js"
       }, {
         icon: "fa-regular fa-circle-xmark",
         text: "Reset",

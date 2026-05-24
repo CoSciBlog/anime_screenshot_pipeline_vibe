@@ -17,9 +17,10 @@ module.exports = {
         path: ".",
         message: [
           "uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128",
-          "uv pip install -r requirements.txt",
+          "uv pip install -r requirements-dev.txt",
           "uv pip install -e waifuc",
-          "uv pip install -e ."
+          "uv pip install -e .",
+          "python -m pytest -q"
         ]
       }
     },
@@ -31,9 +32,10 @@ module.exports = {
         path: ".",
         message: [
           "uv pip install torch torchvision torchaudio",
-          "uv pip install -r requirements.txt",
+          "uv pip install -r requirements-dev.txt",
           "uv pip install -e waifuc",
-          "uv pip install -e ."
+          "uv pip install -e .",
+          "python -m pytest -q"
         ]
       }
     }

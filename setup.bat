@@ -14,6 +14,8 @@ if not exist "env\Scripts\python.exe" (
   %PYTHON% -m venv env || exit /b 1
 )
 
+env\Scripts\python.exe -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 10) else 'Python 3.10 is required. Delete env and rerun setup.bat with Python 3.10 installed.')" || exit /b 1
+
 env\Scripts\python.exe -m pip --version >nul 2>nul
 if not %errorlevel%==0 (
   echo Repairing pip in the existing Python environment...
@@ -32,9 +34,10 @@ if %errorlevel%==0 (
   env\Scripts\python.exe -m uv pip install torch torchvision torchaudio || exit /b 1
 )
 
-env\Scripts\python.exe -m uv pip install -r requirements.txt || exit /b 1
+env\Scripts\python.exe -m uv pip install -r requirements-dev.txt || exit /b 1
 env\Scripts\python.exe -m uv pip install -e waifuc || exit /b 1
 env\Scripts\python.exe -m uv pip install -e . || exit /b 1
+env\Scripts\python.exe -m pytest -q || exit /b 1
 
-echo Setup completed. Start the UI with launch.bat.
+echo Setup and verification completed. Start the UI with launch.bat.
 endlocal

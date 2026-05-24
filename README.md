@@ -14,13 +14,15 @@ For conversion please use [utilities/convert_metadata.py](utilities/convert_meta
 The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local workflow editor:
 
 - All CLI settings from `anime2sd/parse_arguments.py` are rendered as controls, grouped by the stage where they take effect. Only settings tabs for enabled stages are displayed; **General** remains available for shared paths and output options.
+- **Workflow** is shown first, followed by a two-column **Configuration** panel for workspace and profile management.
 - Each control displays the original argument description as inline help text, with concise quality, matching, or performance guidance where the setting affects results.
 - Stages are selected independently. Stages 1 (frame extraction) and 2 (cropping) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
 - UI profiles can be exported to and imported from TOML. A single **Save profile** action stores the loaded starting preset values, stage selection, workspace root, and any field edits together in one executable profile beneath `configs/ui/saved/`. These files are intentionally ignored by Git because they commonly contain local paths.
-- A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder and create the required working structure with one button.
+- A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder and create the required working structure with one button. Existing workspace contents are preserved; a separate **Clear generated output** action removes only generated `dst` contents.
 - Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a profile is saved or a run starts.
 - Consecutive selected stages are executed as one pipeline segment through `automatic_pipeline.py`, so generated output flows into the next selected stage correctly.
 - **Stop pipeline** cancels the active UI run and terminates its pipeline process tree without closing the web interface.
+- Pipeline progress is mirrored in both the web run log and the launching terminal.
 - **Shut down server** terminates an active pipeline if necessary and closes the local Gradio server completely.
 
 The UI listens only on `http://127.0.0.1:7866`. Port `7866` is intentionally fixed for repeatable bookmarks and Pinokio integration. Close another service using that port before launching Frame Lab.
@@ -41,6 +43,8 @@ C:\datasets\anime\frieren_project\
 ```
 
 The content expected in `src` depends on the first enabled stage: videos for Stage 1, raw images for Stage 2, or already cropped images when starting directly at Stage 3. Keep processing stages that depend on each other's output enabled consecutively, for example Stages 2 and 3 together.
+
+Running **Create workspace folders** is non-destructive: existing `src`, `ref`, `logs`, and `dst` content is retained. Use **Clear generated output** only when you intentionally want to remove the contents below `dst`; it recreates empty `dst/intermediate` and `dst/training` folders and does not touch source or reference images.
 
 ### Character Reference Images
 

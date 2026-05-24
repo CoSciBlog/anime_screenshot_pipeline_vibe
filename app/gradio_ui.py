@@ -4,6 +4,7 @@ import argparse
 import os
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import threading
@@ -510,12 +511,31 @@ def create_workspace_structure(root_value: str):
             "Enter a workspace root before creating folders.",
         )
     root = Path(normalize_path_value(root_value))
+    existing_directories = [
+        relative_path for relative_path in WORKSPACE_DIRECTORIES
+        if (root / relative_path).is_dir()
+    ]
     for relative_path in WORKSPACE_DIRECTORIES:
-        (root / relative_path).mkdir(parents=True, exist_ok=True)
-    status = (
-        f"Workspace ready: `{root}`. Place first-stage input in `src`, "
-        "character references in `ref`, and outputs will be written under `dst`."
-    )
+        path = root / relative_path
+        if path.exists() and not path.is_dir():
+            return (
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                gr.update(),
+                f"Cannot create workspace: `{path}` exists but is not a folder.",
+            )
+        path.mkdir(parents=True, exist_ok=True)
+    if existing_directories:
+        status = (
+            f"Workspace ready: `{root}`. Existing folders and their contents were kept; "
+            "new missing folders were created."
+        )
+    else:
+        status = (
+            f"Workspace created: `{root}`. Place first-stage input in `src`, "
+            "character references in `ref`, and outputs will be written under `dst`."
+        )
     return (
         gr.update(value=paths["src_dir"]),
         gr.update(value=paths["dst_dir"]),
@@ -523,6 +543,39 @@ def create_workspace_structure(root_value: str):
         gr.update(value=paths["log_dir"]),
         status,
     )
+
+
+def clear_workspace_output(root_value: str) -> str:
+    paths = workspace_paths(root_value)
+    if not paths:
+        return "Enter a workspace root before clearing generated output."
+    with PIPELINE_PROCESS_LOCK:
+        process = ACTIVE_PIPELINE_PROCESS
+        if process is not None and process.poll() is None:
+            return "Stop the active pipeline before clearing generated output."
+    root = Path(normalize_path_value(root_value))
+    dst = Path(paths["dst_dir"])
+    if dst.resolve().parent != root.resolve():
+        return "Output cleanup stopped because the destination is outside the workspace root."
+    if dst.exists() and not dst.is_dir():
+        return f"Cannot clear generated output: `{dst}` is not a folder."
+    removed = 0
+    if dst.exists():
+        for item in dst.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+            removed += 1
+    for relative_path in ("dst/intermediate", "dst/training"):
+        (root / relative_path).mkdir(parents=True, exist_ok=True)
+    if removed:
+        return f"Generated output cleared: `{dst}`. Empty output folders were recreated."
+    return f"No generated output to clear in `{dst}`. Empty output folders are ready."
+
+
+def mirror_run_output(line: str) -> None:
+    print(line, end="" if line.endswith("\n") else "\n", flush=True)
 
 
 def stage_values(selected: Iterable[Any] | None) -> list[int]:
@@ -691,6 +744,7 @@ def execute_config(stages: list[int], config: dict[str, Any]):
                 ACTIVE_PIPELINE_PROCESS = process
             assert process.stdout is not None
             for line in process.stdout:
+                mirror_run_output(line)
                 history.append(line.rstrip())
                 history = history[-400:]
                 yield "\n".join(history)
@@ -769,69 +823,74 @@ def build_interface() -> gr.Blocks:
         title="Anime2SD Frame Lab",
         elem_classes="workspace",
     ) as demo:
-        with gr.Row():
-            with gr.Column(scale=2, elem_classes="run-panel"):
-                gr.HTML("<p class='panel-label'>Workflow</p>")
-                stage_selector = gr.CheckboxGroup(
-                    choices=[(f"{number} - {details[0]}", str(number)) for number, details in STAGES.items()],
-                    value=DEFAULT_ENABLED_STAGES,
-                    label="Stages to run",
-                    info="Only enabled stages are run and shown in Settings below. Stage 3 uses character references.",
-                )
-                with gr.Accordion("Stage guide", open=False):
-                    gr.HTML(
-                        "<div class='stage-grid'><table>"
-                        + "".join(
-                            f"<tr><td>{number} - {title}</td><td>{description}</td></tr>"
-                            for number, (title, description) in STAGES.items()
-                        )
-                        + "</table></div>"
+        with gr.Column(elem_classes="run-panel"):
+            gr.HTML("<p class='panel-label'>Workflow</p>")
+            stage_selector = gr.CheckboxGroup(
+                choices=[(f"{number} - {details[0]}", str(number)) for number, details in STAGES.items()],
+                value=DEFAULT_ENABLED_STAGES,
+                label="Stages to run",
+                info="Only enabled stages are run and shown in Settings below. Stage 3 uses character references.",
+            )
+            with gr.Accordion("Stage guide", open=False):
+                gr.HTML(
+                    "<div class='stage-grid'><table>"
+                    + "".join(
+                        f"<tr><td>{number} - {title}</td><td>{description}</td></tr>"
+                        for number, (title, description) in STAGES.items()
                     )
-                with gr.Row():
-                    run_button = gr.Button("Run pipeline", variant="primary")
-                    stop_button = gr.Button("Stop pipeline", variant="stop")
-                output = gr.Textbox(label="Run log", lines=18, interactive=False)
-            with gr.Column(scale=1, elem_classes="run-panel"):
-                gr.HTML("<p class='panel-label'>Configuration</p>")
-                with gr.Column(elem_classes="workspace-card"):
-                    workspace_root = gr.Textbox(
-                        label="Workspace root",
-                        value="",
-                        placeholder=r"C:\datasets\anime\my_project",
+                    + "</table></div>"
+                )
+            with gr.Row():
+                run_button = gr.Button("Run pipeline", variant="primary")
+                stop_button = gr.Button("Stop pipeline", variant="stop")
+            output = gr.Textbox(label="Run log", lines=18, interactive=False)
+
+        with gr.Column(elem_classes="run-panel"):
+            gr.HTML("<p class='panel-label'>Configuration</p>")
+            with gr.Row():
+                with gr.Column():
+                    with gr.Column(elem_classes="workspace-card"):
+                        workspace_root = gr.Textbox(
+                            label="Workspace root",
+                            value="",
+                            placeholder=r"C:\datasets\anime\my_project",
+                            info=(
+                                "Optional single working root. When set, runs and saved profiles use "
+                                "<root>\\src, <root>\\dst, <root>\\ref, and <root>\\logs."
+                            ),
+                        )
+                        create_workspace_button = gr.Button("Create workspace folders")
+                        clear_output_button = gr.Button("Clear generated output", variant="stop")
+                        gr.Markdown(
+                            "`src` = first-stage input, `ref` = character reference images, "
+                            "`dst/intermediate` and `dst/training` = generated pipeline data. "
+                            "Creating a workspace keeps existing contents; clearing output removes only `dst` results."
+                        )
+                with gr.Column():
+                    preset = gr.Dropdown(
+                        choices=[
+                            "configs/pipelines/screenshots.toml",
+                            "configs/pipelines/booru.toml",
+                            "configs/pipelines/base.toml",
+                        ],
+                        value="configs/pipelines/screenshots.toml",
+                        label="Starting preset",
                         info=(
-                            "Optional single working root. When set, runs and saved profiles use "
-                            "<root>\\src, <root>\\dst, <root>\\ref, and <root>\\logs."
+                            "Load a bundled starting point. Its values and your edits are saved "
+                            "together in one TOML profile."
                         ),
                     )
-                    create_workspace_button = gr.Button("Create workspace folders")
-                    gr.Markdown(
-                        "`src` = first-stage input, `ref` = character reference images, "
-                        "`dst/intermediate` and `dst/training` = generated pipeline data."
+                    uploaded = gr.File(label="Import existing profile", file_types=[".toml"], type="filepath")
+                    load_button = gr.Button("Load profile")
+                    profile_name = gr.Textbox(
+                        label="Profile name",
+                        value="my_pipeline",
+                        info="One TOML file stores the preset-derived values, stage selection, paths, and edits.",
                     )
-                preset = gr.Dropdown(
-                    choices=[
-                        "configs/pipelines/screenshots.toml",
-                        "configs/pipelines/booru.toml",
-                        "configs/pipelines/base.toml",
-                    ],
-                    value="configs/pipelines/screenshots.toml",
-                    label="Starting preset",
-                    info=(
-                        "Load a bundled starting point. Its values and your edits are saved "
-                        "together in one TOML profile."
-                    ),
-                )
-                uploaded = gr.File(label="Import existing profile", file_types=[".toml"], type="filepath")
-                load_button = gr.Button("Load profile")
-                profile_name = gr.Textbox(
-                    label="Profile name",
-                    value="my_pipeline",
-                    info="One TOML file stores the preset-derived values, stage selection, paths, and edits.",
-                )
-                save_button = gr.Button("Save profile", variant="primary")
-                downloaded = gr.File(label="Saved profile", interactive=False)
-                status = gr.Markdown(f"Web interface: `http://127.0.0.1:{PORT}` (fixed port).")
-                shutdown_button = gr.Button("Shut down server", variant="stop", elem_classes="shutdown-button")
+                    save_button = gr.Button("Save profile", variant="primary")
+                    downloaded = gr.File(label="Saved profile", interactive=False)
+            status = gr.Markdown(f"Web interface: `http://127.0.0.1:{PORT}` (fixed port).")
+            shutdown_button = gr.Button("Shut down server", variant="stop", elem_classes="shutdown-button")
 
         gr.HTML("<p class='settings-label'>Settings by stage</p>")
         with gr.Tabs(elem_classes="settings-tabs"):
@@ -876,6 +935,12 @@ def build_interface() -> gr.Blocks:
             outputs=[*workspace_path_outputs, status],
             api_name="create_workspace",
         )
+        clear_output_button.click(
+            clear_workspace_output,
+            inputs=workspace_root,
+            outputs=status,
+            api_name="clear_workspace_output",
+        )
 
         save_button.click(
             save_configuration,
@@ -911,22 +976,16 @@ def build_interface() -> gr.Blocks:
             api_name="shutdown_server",
             concurrency_limit=None,
         )
-        with gr.Accordion("Programmatic access", open=False):
-            gr.Markdown(
-                "A saved TOML profile can be executed through the named `run_saved_profile` API. "
-                "When no stage list is provided, the checkboxes stored in the profile are used."
-            )
-            with gr.Row():
-                api_profile = gr.Textbox(label="Relative profile path", value="configs/ui/saved/my_pipeline.toml")
-                api_stages = gr.Textbox(label="Stages (optional)", value="3,4,5,6,7")
-            api_button = gr.Button("Run saved profile")
-            api_output = gr.Textbox(label="API run log", lines=12, interactive=False)
-            api_button.click(
-                run_saved_profile,
-                inputs=[api_profile, api_stages],
-                outputs=api_output,
-                api_name="run_saved_profile",
-            )
+        api_profile = gr.Textbox(value="configs/ui/saved/my_pipeline.toml", visible=False, container=False)
+        api_stages = gr.Textbox(value="", visible=False, container=False)
+        api_output = gr.Textbox(visible=False, container=False)
+        api_button = gr.Button(visible=False)
+        api_button.click(
+            run_saved_profile,
+            inputs=[api_profile, api_stages],
+            outputs=api_output,
+            api_name="run_saved_profile",
+        )
     return demo
 
 

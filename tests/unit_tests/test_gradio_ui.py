@@ -19,10 +19,14 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
     assert "Shut down server" in components
     assert "Workspace root" in components
     assert "Create workspace folders" in components
+    assert "Clear generated output" in components
     assert "Save profile" in components
     assert "Save settings to profile" not in components
     assert "Stage guide" in components
+    assert "Programmatic access" not in components
     assert "create_workspace" in dependencies
+    assert "clear_workspace_output" in dependencies
+    assert "run_saved_profile" in dependencies
     assert "stop_pipeline" in dependencies
     assert "shutdown_server" in dependencies
     assert tabs[0] == "General"
@@ -58,9 +62,65 @@ def test_workspace_structure_maps_and_creates_all_pipeline_directories(tmp_path)
     assert dst["value"] == str(tmp_path / "dst")
     assert ref["value"] == str(tmp_path / "ref")
     assert logs["value"] == str(tmp_path / "logs")
-    assert "Workspace ready" in status
+    assert "Workspace created" in status
     for relative_path in ui.WORKSPACE_DIRECTORIES:
         assert (tmp_path / relative_path).is_dir()
+
+
+def test_workspace_structure_preserves_existing_contents(tmp_path):
+    existing_file = tmp_path / "src" / "existing.png"
+    existing_file.parent.mkdir()
+    existing_file.write_text("keep", encoding="utf-8")
+
+    *_updates, status = ui.create_workspace_structure(str(tmp_path))
+
+    assert existing_file.read_text(encoding="utf-8") == "keep"
+    assert "Existing folders and their contents were kept" in status
+
+
+def test_clear_workspace_output_deletes_only_generated_dst_content(tmp_path):
+    source = tmp_path / "src" / "keep.png"
+    reference = tmp_path / "ref" / "frieren" / "keep.png"
+    result = tmp_path / "dst" / "training" / "delete.webp"
+    for file_path in (source, reference, result):
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text("data", encoding="utf-8")
+
+    status = ui.clear_workspace_output(str(tmp_path))
+
+    assert source.exists()
+    assert reference.exists()
+    assert not result.exists()
+    assert (tmp_path / "dst" / "intermediate").is_dir()
+    assert (tmp_path / "dst" / "training").is_dir()
+    assert "Generated output cleared" in status
+
+
+def test_clear_workspace_output_refuses_while_pipeline_is_running(tmp_path):
+    result = tmp_path / "dst" / "training" / "keep.webp"
+    result.parent.mkdir(parents=True)
+    result.write_text("data", encoding="utf-8")
+
+    class RunningProcess:
+        def poll(self):
+            return None
+
+    with ui.PIPELINE_PROCESS_LOCK:
+        ui.ACTIVE_PIPELINE_PROCESS = RunningProcess()
+    try:
+        status = ui.clear_workspace_output(str(tmp_path))
+    finally:
+        with ui.PIPELINE_PROCESS_LOCK:
+            ui.ACTIVE_PIPELINE_PROCESS = None
+
+    assert result.exists()
+    assert "Stop the active pipeline" in status
+
+
+def test_run_output_is_mirrored_to_terminal(capsys):
+    ui.mirror_run_output("running stage\n")
+
+    assert capsys.readouterr().out == "running stage\n"
 
 
 def test_consecutive_selected_stages_are_run_as_one_pipeline_segment():

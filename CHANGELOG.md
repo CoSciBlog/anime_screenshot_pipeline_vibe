@@ -12,6 +12,7 @@
 - Replaced per-image missing-metadata warnings with one informational initialization summary and made **Stop pipeline** cancel the running UI task while terminating its process tree.
 - Unified preset-based editing and profile export behind one **Save profile** action; the saved TOML now records its starting preset together with stages, workspace paths, and edited settings.
 - Collapsed the workflow stage explanation table into an optional **Stage guide** panel to reduce vertical space while selecting stages.
+- Moved **Configuration** below **Workflow** in a two-column layout, removed the visible programmatic-access panel, mirrored pipeline progress to the terminal, and added non-destructive workspace reuse plus an explicit generated-output cleanup action.
 - Added `Stop pipeline` and `Shut down server` controls with named Gradio API endpoints.
 - Updated the Python dependency set for Python 3.10, including Gradio `6.14.0`, Transformers `5.9.0`, and current compatible image-processing dependencies while preserving CUDA PyTorch installation.
 - Added focused UI/process-control and terminal-logging unit tests, reproducible `requirements-dev.txt`, and stable pytest collection for optional-data integration tests.

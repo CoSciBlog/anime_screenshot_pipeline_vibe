@@ -21,6 +21,7 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
     assert "Create workspace folders" in components
     assert "Save profile" in components
     assert "Save settings to profile" not in components
+    assert "Stage guide" in components
     assert "create_workspace" in dependencies
     assert "stop_pipeline" in dependencies
     assert "shutdown_server" in dependencies

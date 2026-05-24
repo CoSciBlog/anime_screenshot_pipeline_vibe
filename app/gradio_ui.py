@@ -778,14 +778,15 @@ def build_interface() -> gr.Blocks:
                     label="Stages to run",
                     info="Only enabled stages are run and shown in Settings below. Stage 3 uses character references.",
                 )
-                gr.HTML(
-                    "<div class='stage-grid'><table>"
-                    + "".join(
-                        f"<tr><td>{number} - {title}</td><td>{description}</td></tr>"
-                        for number, (title, description) in STAGES.items()
+                with gr.Accordion("Stage guide", open=False):
+                    gr.HTML(
+                        "<div class='stage-grid'><table>"
+                        + "".join(
+                            f"<tr><td>{number} - {title}</td><td>{description}</td></tr>"
+                            for number, (title, description) in STAGES.items()
+                        )
+                        + "</table></div>"
                     )
-                    + "</table></div>"
-                )
                 with gr.Row():
                     run_button = gr.Button("Run pipeline", variant="primary")
                     stop_button = gr.Button("Stop pipeline", variant="stop")

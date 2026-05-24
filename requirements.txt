@@ -9,6 +9,6 @@ timm==0.9.12
 hbutils==0.9.3
 pynyaasi==0.0.1
 torrentp==0.1.6
-transformers==4.35.0    # Only used for embedding name checking
+transformers==4.53.0    # Only used for embedding name checking; compatible with Gradio's huggingface-hub range
 wheel==0.42.0           # For waifuc installation
 gradio>=4.44.1,<6       # Local web UI for configuring and running pipeline stages

@@ -26,21 +26,21 @@ RUNTIME_CONFIG = SAVED_CONFIG_DIR / "_last_run.toml"
 
 STAGES = OrderedDict(
     [
-        (0, ("Download", "Anime- oder Booru-Quellen herunterladen. Fuer lokale Videos nicht aktivieren.")),
-        (1, ("Frames", "Frames extrahieren und aehnliche Bilder entfernen.")),
-        (2, ("Crop", "Charaktere erkennen und Bildausschnitte erzeugen.")),
-        (3, ("Classify", "Charakterausschnitte anhand Referenzen oder Clustern zuordnen.")),
-        (4, ("Select", "Trainingsbilder auswaehlen, kopieren und skalieren.")),
-        (5, ("Caption", "Tags, Captions, Core-Tags und Wildcards erzeugen.")),
-        (6, ("Arrange", "Trainingsmaterial nach Konzepten und Charakteren anordnen.")),
-        (7, ("Balance", "Wiederholungsgewichte fuer das Training berechnen.")),
+        (0, ("Download", "Download anime or booru sources. Disable this step for local videos.")),
+        (1, ("Frames", "Extract frames and remove similar images.")),
+        (2, ("Crop", "Detect characters and generate image crops.")),
+        (3, ("Classify", "Assign character crops using references or clusters.")),
+        (4, ("Select", "Select, copy, and resize training images.")),
+        (5, ("Caption", "Generate tags, captions, core tags, and wildcards.")),
+        (6, ("Arrange", "Arrange training material by concepts and characters.")),
+        (7, ("Balance", "Calculate repeat weights for training.")),
     ]
 )
 
 FIELD_GROUPS = OrderedDict(
     [
         (
-            "Allgemein",
+            "General",
             [
                 "src_dir",
                 "dst_dir",
@@ -57,7 +57,7 @@ FIELD_GROUPS = OrderedDict(
             ],
         ),
         (
-            "Schritt 0 - Download",
+            "Stage 0 - Download",
             [
                 "anime_name",
                 "candidate_submitters",
@@ -75,7 +75,7 @@ FIELD_GROUPS = OrderedDict(
             ],
         ),
         (
-            "Schritt 1 - Frames",
+            "Stage 1 - Frames",
             [
                 "extract_key",
                 "image_prefix",
@@ -87,7 +87,7 @@ FIELD_GROUPS = OrderedDict(
             ],
         ),
         (
-            "Schritt 2 - Crop",
+            "Stage 2 - Crop",
             [
                 "min_crop_size",
                 "crop_with_head",
@@ -97,7 +97,7 @@ FIELD_GROUPS = OrderedDict(
             ],
         ),
         (
-            "Schritt 3 - Classify",
+            "Stage 3 - Classify",
             [
                 "character_ref_dir",
                 "n_add_to_ref_per_character",
@@ -113,7 +113,7 @@ FIELD_GROUPS = OrderedDict(
             ],
         ),
         (
-            "Schritt 4 - Select",
+            "Stage 4 - Select",
             [
                 "overwrite_emb_init_info",
                 "character_overwrite_uncropped",
@@ -128,7 +128,7 @@ FIELD_GROUPS = OrderedDict(
             ],
         ),
         (
-            "Schritt 5 - Caption",
+            "Stage 5 - Caption",
             [
                 "overwrite_tags",
                 "tagging_method",
@@ -169,7 +169,7 @@ FIELD_GROUPS = OrderedDict(
             ],
         ),
         (
-            "Schritt 6 - Arrange",
+            "Stage 6 - Arrange",
             [
                 "rearrange_up_levels",
                 "arrange_format",
@@ -178,7 +178,7 @@ FIELD_GROUPS = OrderedDict(
             ],
         ),
         (
-            "Schritt 7 - Balance",
+            "Stage 7 - Balance",
             [
                 "compute_multiply_up_levels",
                 "min_multiply",
@@ -191,22 +191,106 @@ FIELD_GROUPS = OrderedDict(
 
 STYLE = """
 .gradio-container {
-  background: radial-gradient(circle at 8% 0%, #20394c 0%, #101923 34%, #090e13 100%);
-  color: #f1eee6;
-  font-family: "Segoe UI", sans-serif;
+  --frame-bg: #f2f4f2;
+  --panel-bg: #ffffff;
+  --panel-raised: #f7f8f6;
+  --line: #d8ded9;
+  --ink: #172127;
+  --muted: #5b6b70;
+  --accent: #bf5a20;
+  --accent-soft: #f8e7d7;
+  background:
+    radial-gradient(circle at 3% 0%, #fff9ee 0, transparent 35rem),
+    linear-gradient(180deg, #fafbf8 0%, var(--frame-bg) 100%);
+  color: var(--ink);
+  font-family: "Aptos", "Trebuchet MS", sans-serif;
+  min-height: 100vh;
 }
-.hero {
-  padding: 1.6rem 1.8rem;
-  border: 1px solid #314858;
-  background: linear-gradient(110deg, rgba(16, 26, 35, .92), rgba(23, 43, 55, .72));
-  box-shadow: inset 4px 0 0 #f2aa4c;
-  margin-bottom: 1rem;
+.dark .gradio-container,
+.gradio-container.dark {
+  --frame-bg: #0c141a;
+  --panel-bg: #121d24;
+  --panel-raised: #18262e;
+  --line: #2b3e47;
+  --ink: #f2efe9;
+  --muted: #b4c1c4;
+  --accent: #f2a34b;
+  --accent-soft: #2b241c;
+  background:
+    radial-gradient(circle at 3% 0%, #20394b 0, transparent 36rem),
+    linear-gradient(180deg, #0e1921 0%, var(--frame-bg) 100%);
 }
-.hero h1 { margin: 0 0 .35rem; letter-spacing: .06em; text-transform: uppercase; color: #f8d59b; }
-.hero p { margin: 0; color: #cad3d5; max-width: 72ch; }
-.stage-grid table { width: 100%; font-size: .93rem; }
-.stage-grid td:first-child { color: #f2aa4c; font-weight: 600; white-space: nowrap; }
-.run-panel { border: 1px solid #334956; background: rgba(8, 14, 19, .62); padding: .8rem; }
+.gradio-container h2,
+.gradio-container h3,
+.gradio-container label,
+.gradio-container .prose {
+  color: var(--ink);
+}
+.gradio-container .secondary-text,
+.gradio-container .info {
+  color: var(--muted);
+}
+.workspace {
+  padding-top: .5rem;
+}
+.run-panel {
+  border: 1px solid var(--line);
+  border-radius: .7rem;
+  background: var(--panel-bg);
+  padding: 1rem;
+  box-shadow: 0 10px 34px rgba(15, 26, 34, .06);
+}
+.dark .run-panel { box-shadow: 0 14px 38px rgba(0, 0, 0, .22); }
+.panel-label {
+  margin: 0 0 .75rem;
+  color: var(--muted);
+  font-size: .74rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.stage-grid {
+  border: 1px solid var(--line);
+  border-radius: .55rem;
+  background: var(--panel-raised);
+  overflow: hidden;
+  margin: .6rem 0 .9rem;
+}
+.stage-grid table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.stage-grid td { padding: .62rem .7rem; border-bottom: 1px solid var(--line); color: var(--muted); }
+.stage-grid tr:last-child td { border-bottom: 0; }
+.stage-grid td:first-child { color: var(--accent); font-weight: 700; white-space: nowrap; }
+.settings-label {
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  margin: 1.4rem 0 .65rem;
+}
+.settings-tabs {
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: .7rem;
+  padding: .55rem;
+  box-shadow: 0 10px 34px rgba(15, 26, 34, .05);
+}
+.settings-tabs button {
+  color: var(--muted);
+  font-weight: 600;
+}
+.settings-tabs button.selected {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.settings-grid {
+  padding-top: .7rem;
+}
+.gradio-container .primary {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.gradio-container a { color: var(--accent); }
 """
 
 
@@ -267,6 +351,11 @@ def display_value(action: argparse.Action, value: Any) -> Any:
     return "" if value is None else value
 
 
+def component_value(action: argparse.Action, value: Any) -> Any:
+    shown = display_value(action, value)
+    return None if action.choices and shown == "" else shown
+
+
 def parse_list(value: str) -> list[str]:
     return [item.strip() for item in re.split(r"[\n,]+", value or "") if item.strip()]
 
@@ -308,7 +397,7 @@ def save_configuration(name: str, selected: list[str], *values: Any):
     path = profile_path(name)
     with path.open("w", encoding="utf-8") as handle:
         toml.dump(config, handle)
-    return f"Konfiguration gespeichert: {path.relative_to(ROOT)}", str(path)
+    return f"Configuration saved: {path.relative_to(ROOT)}", str(path)
 
 
 def load_configuration(preset: str, uploaded_path: str | None):
@@ -319,19 +408,19 @@ def load_configuration(preset: str, uploaded_path: str | None):
         loaded = flatten_toml(toml.load(path))
         ui_config = loaded.pop("ui", {}) if isinstance(loaded.get("ui"), dict) else {}
         config.update({key: clean_value(value) for key, value in loaded.items()})
-        status = f"Konfiguration geladen: {path.name}"
+        status = f"Configuration loaded: {path.name}"
     else:
-        status = f"Konfiguration nicht gefunden: {path}"
+        status = f"Configuration not found: {path}"
     selected = [str(stage) for stage in ui_config.get("enabled_stages", [3, 4, 5, 6, 7])]
     updates = [gr.update(value=selected)]
-    updates.extend(gr.update(value=display_value(action, config.get(action.dest))) for action in ACTIONS)
+    updates.extend(gr.update(value=component_value(action, config.get(action.dest))) for action in ACTIONS)
     updates.append(status)
     return updates
 
 
 def execute_config(stages: list[int], config: dict[str, Any]):
     if not stages:
-        yield "Kein Schritt ausgewaehlt. Aktivieren Sie mindestens eine Checkbox."
+        yield "No stage selected. Enable at least one checkbox."
         return
 
     SAVED_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -339,12 +428,12 @@ def execute_config(stages: list[int], config: dict[str, Any]):
         toml.dump(config, handle)
 
     history = [
-        f"Runtime-Konfiguration: {RUNTIME_CONFIG.relative_to(ROOT)}",
-        f"Schritte: {', '.join(str(stage) for stage in stages)}",
+        f"Runtime configuration: {RUNTIME_CONFIG.relative_to(ROOT)}",
+        f"Stages: {', '.join(str(stage) for stage in stages)}",
     ]
     for stage in stages:
         title = STAGES[stage][0]
-        history.append(f"\n--- Schritt {stage}: {title} ---")
+        history.append(f"\n--- Stage {stage}: {title} ---")
         yield "\n".join(history)
         command = [
             sys.executable,
@@ -371,11 +460,11 @@ def execute_config(stages: list[int], config: dict[str, Any]):
             yield "\n".join(history)
         return_code = process.wait()
         if return_code != 0:
-            history.append(f"Schritt {stage} ist mit Exit-Code {return_code} fehlgeschlagen.")
+            history.append(f"Stage {stage} failed with exit code {return_code}.")
             yield "\n".join(history)
             return
-        history.append(f"Schritt {stage} abgeschlossen.")
-    history.append("Alle ausgewaehlten Schritte wurden abgeschlossen.")
+        history.append(f"Stage {stage} completed.")
+    history.append("All selected stages completed.")
     yield "\n".join(history)
 
 
@@ -386,7 +475,7 @@ def run_selected_stages(selected: list[str], *values: Any):
 def run_saved_profile(config_path: str, stages_text: str):
     requested_path = (ROOT / config_path).resolve()
     if ROOT not in requested_path.parents or not requested_path.exists():
-        yield "Die Profil-Datei muss innerhalb des Projektordners existieren."
+        yield "The profile file must exist inside the project directory."
         return
     loaded = flatten_toml(toml.load(requested_path))
     ui_config = loaded.pop("ui", {}) if isinstance(loaded.get("ui"), dict) else {}
@@ -399,8 +488,8 @@ def run_saved_profile(config_path: str, stages_text: str):
 
 def make_component(action: argparse.Action, value: Any):
     label = f"--{action.dest}"
-    info = action.help or "Pipeline-Einstellung."
-    shown = display_value(action, value)
+    info = action.help or "Pipeline setting."
+    shown = component_value(action, value)
     if isinstance(action, argparse._StoreTrueAction):
         return gr.Checkbox(label=label, value=shown, info=info)
     if action.choices:
@@ -419,24 +508,19 @@ def build_interface() -> gr.Blocks:
     grouped = {name: set(keys) for name, keys in FIELD_GROUPS.items()}
     known_fields = {key for keys in grouped.values() for key in keys}
 
-    with gr.Blocks(css=STYLE, title="Anime2SD Frame Lab") as demo:
-        gr.HTML(
-            """
-            <section class="hero">
-              <h1>Anime2SD / Frame Lab</h1>
-              <p>Kontrollzentrum fuer Extraktion, Klassifikation und Captioning.
-              Speichern Sie Profile fuer wiederholbare Laeufe auf RTX 3090 und RTX 5070 Ti.</p>
-            </section>
-            """
-        )
+    with gr.Blocks(
+        css=STYLE,
+        title="Anime2SD Frame Lab",
+        elem_classes="workspace",
+    ) as demo:
         with gr.Row():
             with gr.Column(scale=2, elem_classes="run-panel"):
-                gr.Markdown("### Ablauf")
+                gr.HTML("<p class='panel-label'>Workflow</p>")
                 stage_selector = gr.CheckboxGroup(
                     choices=[(f"{number} - {details[0]}", str(number)) for number, details in STAGES.items()],
                     value=["3", "4", "5", "6", "7"],
-                    label="Auszufuehrende Schritte",
-                    info="Schritte 1 und 2 sind optional; Schritte 3 bis 7 koennen einzeln ein- oder ausgeschaltet werden.",
+                    label="Stages to run",
+                    info="Stages 1 and 2 are optional; stages 3 through 7 can be enabled or disabled individually.",
                 )
                 gr.HTML(
                     "<div class='stage-grid'><table>"
@@ -447,10 +531,10 @@ def build_interface() -> gr.Blocks:
                     + "</table></div>"
                 )
                 with gr.Row():
-                    run_button = gr.Button("Pipeline starten", variant="primary")
-                output = gr.Textbox(label="Laufprotokoll", lines=18, interactive=False)
+                    run_button = gr.Button("Run pipeline", variant="primary")
+                output = gr.Textbox(label="Run log", lines=18, interactive=False)
             with gr.Column(scale=1, elem_classes="run-panel"):
-                gr.Markdown("### Konfiguration")
+                gr.HTML("<p class='panel-label'>Configuration</p>")
                 preset = gr.Dropdown(
                     choices=[
                         "configs/pipelines/screenshots.toml",
@@ -458,32 +542,35 @@ def build_interface() -> gr.Blocks:
                         "configs/pipelines/base.toml",
                     ],
                     value="configs/pipelines/screenshots.toml",
-                    label="Vorlage",
-                    info="Laedt eine Projektvorlage; fehlende Werte werden aus den Standardwerten ergaenzt.",
+                    label="Preset",
+                    info="Load a project preset; missing values are filled from defaults.",
                 )
-                uploaded = gr.File(label="TOML-Profil importieren", file_types=[".toml"], type="filepath")
-                load_button = gr.Button("Konfiguration laden")
-                profile_name = gr.Textbox(label="Profilname", value="my_pipeline", info="Dateiname fuer ein gespeichertes TOML-Profil.")
-                save_button = gr.Button("Konfiguration speichern")
-                downloaded = gr.File(label="Gespeichertes Profil", interactive=False)
-                status = gr.Markdown(f"Weboberflaeche: `http://127.0.0.1:{PORT}` (fester Port).")
+                uploaded = gr.File(label="Import TOML profile", file_types=[".toml"], type="filepath")
+                load_button = gr.Button("Load configuration")
+                profile_name = gr.Textbox(label="Profile name", value="my_pipeline", info="File name for a saved TOML profile.")
+                save_button = gr.Button("Save configuration")
+                downloaded = gr.File(label="Saved profile", interactive=False)
+                status = gr.Markdown(f"Web interface: `http://127.0.0.1:{PORT}` (fixed port).")
 
-        gr.Markdown("## Einstellungen pro Schritt")
-        for group_name, fields in FIELD_GROUPS.items():
-            with gr.Accordion(group_name, open=group_name in {"Allgemein", "Schritt 3 - Classify"}):
-                group_actions = [item for item in ACTIONS if item.dest in fields]
-                for offset in range(0, len(group_actions), 3):
-                    with gr.Row():
-                        for action in group_actions[offset:offset + 3]:
-                            controls.append(make_component(action, initial.get(action.dest)))
+        gr.HTML("<p class='settings-label'>Settings by stage</p>")
+        with gr.Tabs(elem_classes="settings-tabs"):
+            for group_name, fields in FIELD_GROUPS.items():
+                with gr.Tab(group_name):
+                    group_actions = [item for item in ACTIONS if item.dest in fields]
+                    with gr.Column(elem_classes="settings-grid"):
+                        for offset in range(0, len(group_actions), 3):
+                            with gr.Row():
+                                for action in group_actions[offset:offset + 3]:
+                                    controls.append(make_component(action, initial.get(action.dest)))
 
-        remaining = [action for action in ACTIONS if action.dest not in known_fields]
-        if remaining:
-            with gr.Accordion("Weitere Einstellungen", open=False):
-                for offset in range(0, len(remaining), 3):
-                    with gr.Row():
-                        for action in remaining[offset:offset + 3]:
-                            controls.append(make_component(action, initial.get(action.dest)))
+            remaining = [action for action in ACTIONS if action.dest not in known_fields]
+            if remaining:
+                with gr.Tab("Additional settings"):
+                    with gr.Column(elem_classes="settings-grid"):
+                        for offset in range(0, len(remaining), 3):
+                            with gr.Row():
+                                for action in remaining[offset:offset + 3]:
+                                    controls.append(make_component(action, initial.get(action.dest)))
 
         ordered_controls = {action.dest: control for action, control in zip(
             [item for group in FIELD_GROUPS.values() for item in ACTIONS if item.dest in group] + remaining,
@@ -508,16 +595,16 @@ def build_interface() -> gr.Blocks:
             outputs=output,
             api_name="run_from_form",
         )
-        with gr.Accordion("Programmatischer Aufruf", open=False):
+        with gr.Accordion("Programmatic access", open=False):
             gr.Markdown(
-                "Ein gespeichertes TOML-Profil kann ueber die benannte API `run_saved_profile` "
-                "ausgefuehrt werden. Ohne Schrittliste gelten die im Profil gespeicherten Checkboxen."
+                "A saved TOML profile can be executed through the named `run_saved_profile` API. "
+                "When no stage list is provided, the checkboxes stored in the profile are used."
             )
             with gr.Row():
-                api_profile = gr.Textbox(label="Relativer Profilpfad", value="configs/ui/saved/my_pipeline.toml")
-                api_stages = gr.Textbox(label="Schritte (optional)", value="3,4,5,6,7")
-            api_button = gr.Button("Gespeichertes Profil ausfuehren")
-            api_output = gr.Textbox(label="API-Laufprotokoll", lines=12, interactive=False)
+                api_profile = gr.Textbox(label="Relative profile path", value="configs/ui/saved/my_pipeline.toml")
+                api_stages = gr.Textbox(label="Stages (optional)", value="3,4,5,6,7")
+            api_button = gr.Button("Run saved profile")
+            api_output = gr.Textbox(label="API run log", lines=12, interactive=False)
             api_button.click(
                 run_saved_profile,
                 inputs=[api_profile, api_stages],

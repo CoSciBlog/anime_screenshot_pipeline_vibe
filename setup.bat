@@ -14,6 +14,12 @@ if not exist "env\Scripts\python.exe" (
   %PYTHON% -m venv env || exit /b 1
 )
 
+env\Scripts\python.exe -m pip --version >nul 2>nul
+if not %errorlevel%==0 (
+  echo Repairing pip in the existing Python environment...
+  env\Scripts\python.exe -m ensurepip --upgrade || exit /b 1
+)
+
 env\Scripts\python.exe -m pip install --upgrade pip uv || exit /b 1
 git submodule update --init --recursive || exit /b 1
 

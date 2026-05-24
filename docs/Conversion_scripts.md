@@ -1,5 +1,7 @@
 # Utilities: Conversion Scripts
 
+Run these repository utilities from the project virtual environment (`source env/bin/activate` on macOS/Linux or `.\env\Scripts\Activate.ps1` in PowerShell).
+
 This page documents the usage of the two conversion scripts [batch_hcp_convert.py](https://github.com/cyber-meow/anime_screenshot_pipeline/blob/main/utilities/batch_hcp_convert.py) and [batch_bundle_convert.py](https://github.com/cyber-meow/anime_screenshot_pipeline/blob/main/utilities/batch_bundle_convert.py).
 
 1. [Batch HCP Convert](#Batch-HCP-Convert)

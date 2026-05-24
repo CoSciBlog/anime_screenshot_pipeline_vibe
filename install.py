@@ -1,70 +1,42 @@
+import shutil
 import subprocess
-import os
 import sys
+from pathlib import Path
 
 
-def run(command, desc=None):
-    if desc is not None:
-        print(desc)
-
-    # Join the command list into a single string if it's a list
-    if isinstance(command, list):
-        command = " ".join(command)
-
-    process = subprocess.run(command, shell=True, capture_output=False)
-    if process.returncode != 0:
-        print(f"Error running command: {command}")
-        print(f"Error code: {process.returncode}")
-        sys.exit(1)
+ROOT = Path(__file__).resolve().parent
 
 
-def install_package(package, command):
-    if not is_installed(package):
-        run(command, f"Installing {package}")
+def install_with_uv(*args: str) -> None:
+    subprocess.run([sys.executable, "-m", "uv", "pip", "install", *args], check=True)
 
 
-def is_installed(package):
-    try:
-        subprocess.run(
-            f"{sys.executable} -m pip show {package}",
-            shell=True,
-            capture_output=True,
-            check=True,
+def ensure_project_environment() -> None:
+    if sys.prefix == sys.base_prefix or Path(sys.prefix).name.lower() != "env":
+        raise SystemExit(
+            "Run this installer through the project environment: "
+            "env/bin/python install.py or env\\Scripts\\python.exe install.py"
         )
-        return True
-    except subprocess.CalledProcessError:
-        return False
 
 
-def prepare_environment():
-    # Install PyTorch
-    # Use cuda 11.8 here for consistency with onnxruntime but that
-    # does not really matter since they use cuda from different places anyway
-    install_package(
-        "torch",
-        (
-            f"{sys.executable} -m pip install torch torchvision torchaudio "
-            "--index-url https://download.pytorch.org/whl/cu118"
-        ),
+def bootstrap_installer() -> None:
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--upgrade", "pip", "uv"],
+        check=True,
     )
 
-    # Install other requirements from requirements.txt
-    requirements_path = os.path.join(os.getcwd(), "requirements.txt")
-    if os.path.exists(requirements_path):
-        run(
-            f"{sys.executable} -m pip install -r {requirements_path}",
-            "Installing requirements from requirements.txt",
-        )
 
-    # Install waifuc package
-    waifuc_path = os.path.join(os.getcwd(), "waifuc")
-    if os.path.exists(waifuc_path):
-        os.chdir(waifuc_path)
-        run(
-            f"{sys.executable} -m pip install .",
-            "Installing waifuc package",
-        )
+def prepare_environment() -> None:
+    torch_args = ["torch", "torchvision", "torchaudio"]
+    if shutil.which("nvidia-smi"):
+        torch_args.extend(["--index-url", "https://download.pytorch.org/whl/cu128"])
+    install_with_uv(*torch_args)
+    install_with_uv("-r", str(ROOT / "requirements.txt"))
+    install_with_uv("-e", str(ROOT / "waifuc"))
+    install_with_uv("-e", str(ROOT))
 
 
 if __name__ == "__main__":
+    ensure_project_environment()
+    bootstrap_installer()
     prepare_environment()

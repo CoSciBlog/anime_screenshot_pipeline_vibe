@@ -32,6 +32,12 @@ launch.bat
 
 `setup.bat` creates `env`, installs the local packages and uses current CUDA 12.8 PyTorch wheels on NVIDIA PCs. This installation route is intended for both an RTX 3090 and an RTX 5070 Ti. Stage 1 additionally requires `ffmpeg` on `PATH`.
 
+All direct Python CLI calls must use this project environment. In PowerShell, activate it once per terminal session:
+
+```powershell
+.\env\Scripts\Activate.ps1
+```
+
 ### Pinokio Launcher
 
 This repository is an app launcher located under `PINOKIO_HOME/api/anime-screenshot-pipeline-vibe`. In Pinokio:
@@ -87,7 +93,7 @@ The curl response contains an event identifier; consume its streamed result from
 
 ## Basic Usage
 
-The script `automatic_pipeline.py` allows you to construct a text-to-image training set from anime with minimum effort. All you have to do is
+The commands in this section assume that the local `env` virtual environment has been activated. The script `automatic_pipeline.py` allows you to construct a text-to-image training set from anime with minimum effort. All you have to do is
 
 ```bash
 python automatic_pipeline.py \
@@ -159,8 +165,15 @@ The script performs all the following automatically.
     cd anime_screenshot_pipeline
     ```
 
-2.  Depending on your operating system, run either `install.sh` or `install.bat` in terminal
-3. Don't forget to activate the environment before running the main script
+2. Depending on your operating system, run either `install.sh` or `install.bat` in terminal. Both create and install into the project-local `env` virtual environment only.
+3. Activate `env` before running Python commands:
+    ```bash
+    source env/bin/activate
+    ```
+    On Windows PowerShell, use:
+    ```powershell
+    .\env\Scripts\Activate.ps1
+    ```
 
 **Additional Steps and Known Issues**
  

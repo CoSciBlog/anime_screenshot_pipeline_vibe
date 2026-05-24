@@ -1,5 +1,7 @@
 # Start Training
 
+Run the repository utilities below from the project virtual environment (`source env/bin/activate` on macOS/Linux or `.\env\Scripts\Activate.ps1` in PowerShell).
+
 Once we go through the pipeline, the dataset is hierarchically organized in `/path/to/dataset_dir/training` with `multiply.txt` in each subfolder indicating the repeat of the images from this directory. You can pretty much launch the training process with your favorite trainer at this stage, modulo a few more steps to make sure that the data are read correctly.
 
 

@@ -19,7 +19,8 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
     assert "Shut down server" in components
     assert "Workspace root" in components
     assert "Create workspace folders" in components
-    assert "Save settings to profile" in components
+    assert "Save profile" in components
+    assert "Save settings to profile" not in components
     assert "create_workspace" in dependencies
     assert "stop_pipeline" in dependencies
     assert "shutdown_server" in dependencies
@@ -63,6 +64,28 @@ def test_workspace_structure_maps_and_creates_all_pipeline_directories(tmp_path)
 
 def test_consecutive_selected_stages_are_run_as_one_pipeline_segment():
     assert ui.stage_ranges([2, 3, 5, 6, 7]) == [(2, 3), (5, 7)]
+
+
+def test_saved_profile_records_the_starting_preset_with_ui_settings(tmp_path, monkeypatch):
+    values = [
+        ui.component_value(action, ui.defaults().get(action.dest))
+        for action in ui.ACTIONS
+    ]
+    monkeypatch.setattr(ui, "ROOT", tmp_path)
+    monkeypatch.setattr(ui, "SAVED_CONFIG_DIR", tmp_path / "configs" / "ui" / "saved")
+
+    _status, output_path = ui.save_configuration(
+        "combined",
+        "configs/pipelines/booru.toml",
+        r"C:\datasets\anime\project",
+        ["2", "3"],
+        *values,
+    )
+    saved = ui.toml.load(output_path)
+
+    assert saved["ui"]["source_preset"] == "configs/pipelines/booru.toml"
+    assert saved["ui"]["enabled_stages"] == [2, 3]
+    assert saved["ui"]["workspace_root"] == os.path.normpath(r"C:\datasets\anime\project")
 
 
 def test_stop_pipeline_terminates_active_child_process():

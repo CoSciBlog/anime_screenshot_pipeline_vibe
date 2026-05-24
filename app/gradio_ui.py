@@ -364,14 +364,6 @@ STYLE = """
 .settings-grid {
   padding-top: .7rem;
 }
-.settings-actions {
-  align-items: end;
-  margin-top: .8rem;
-}
-.settings-hint {
-  color: var(--muted);
-  font-size: .9rem;
-}
 .workspace-card {
   margin: .2rem 0 .85rem;
   padding: .8rem;
@@ -557,12 +549,19 @@ def profile_path(name: str) -> Path:
     return SAVED_CONFIG_DIR / f"{cleaned}.toml"
 
 
-def save_configuration(name: str, workspace_root: str, selected: list[str], *values: Any):
+def save_configuration(
+    name: str,
+    source_preset: str,
+    workspace_root: str,
+    selected: list[str],
+    *values: Any,
+):
     SAVED_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     config = apply_workspace_paths(workspace_root, build_config(values, ACTIONS))
     config["ui"] = {
         "enabled_stages": stage_values(selected),
         "fixed_port": PORT,
+        "source_preset": source_preset,
         "workspace_root": normalize_path_value(workspace_root),
     }
     path = profile_path(name)
@@ -582,9 +581,14 @@ def load_configuration(preset: str, uploaded_path: str | None):
         status = f"Configuration loaded: {path.name}"
     else:
         status = f"Configuration not found: {path}"
+    source_preset = ui_config.get("source_preset", preset)
     selected = [str(stage) for stage in ui_config.get("enabled_stages", DEFAULT_ENABLED_STAGES)]
     workspace_root = ui_config.get("workspace_root", "")
-    updates = [gr.update(value=workspace_root), gr.update(value=selected)]
+    updates = [
+        gr.update(value=source_preset),
+        gr.update(value=workspace_root),
+        gr.update(value=selected),
+    ]
     updates.extend(gr.update(value=component_value(action, config.get(action.dest))) for action in ACTIONS)
     updates.append(status)
     return updates
@@ -810,13 +814,20 @@ def build_interface() -> gr.Blocks:
                         "configs/pipelines/base.toml",
                     ],
                     value="configs/pipelines/screenshots.toml",
-                    label="Preset",
-                    info="Load a project preset; missing values are filled from defaults.",
+                    label="Starting preset",
+                    info=(
+                        "Load a bundled starting point. Its values and your edits are saved "
+                        "together in one TOML profile."
+                    ),
                 )
-                uploaded = gr.File(label="Import TOML profile", file_types=[".toml"], type="filepath")
-                load_button = gr.Button("Load configuration")
-                profile_name = gr.Textbox(label="Profile name", value="my_pipeline", info="File name for a saved TOML profile.")
-                save_button = gr.Button("Save configuration")
+                uploaded = gr.File(label="Import existing profile", file_types=[".toml"], type="filepath")
+                load_button = gr.Button("Load profile")
+                profile_name = gr.Textbox(
+                    label="Profile name",
+                    value="my_pipeline",
+                    info="One TOML file stores the preset-derived values, stage selection, paths, and edits.",
+                )
+                save_button = gr.Button("Save profile", variant="primary")
                 downloaded = gr.File(label="Saved profile", interactive=False)
                 status = gr.Markdown(f"Web interface: `http://127.0.0.1:{PORT}` (fixed port).")
                 shutdown_button = gr.Button("Shut down server", variant="stop", elem_classes="shutdown-button")
@@ -846,16 +857,6 @@ def build_interface() -> gr.Blocks:
                                 for action in remaining[offset:offset + 3]:
                                     controls.append(make_component(action, initial.get(action.dest)))
 
-        with gr.Row(elem_classes="settings-actions"):
-            with gr.Column(scale=3):
-                gr.Markdown(
-                    "Save the current visible-stage selection and all field values to the named TOML profile. "
-                    "Windows paths are normalized when saving or running.",
-                    elem_classes="settings-hint",
-                )
-            with gr.Column(scale=1):
-                settings_save_button = gr.Button("Save settings to profile", variant="primary")
-
         ordered_controls = {action.dest: control for action, control in zip(
             [item for group in FIELD_GROUPS.values() for item in ACTIONS if item.dest in group] + remaining,
             controls,
@@ -877,19 +878,14 @@ def build_interface() -> gr.Blocks:
 
         save_button.click(
             save_configuration,
-            inputs=[profile_name, workspace_root, stage_selector, *controls_in_action_order],
+            inputs=[profile_name, preset, workspace_root, stage_selector, *controls_in_action_order],
             outputs=[status, downloaded],
             api_name="save_configuration",
-        )
-        settings_save_button.click(
-            save_configuration,
-            inputs=[profile_name, workspace_root, stage_selector, *controls_in_action_order],
-            outputs=[status, downloaded],
         )
         load_button.click(
             load_configuration,
             inputs=[preset, uploaded],
-            outputs=[workspace_root, stage_selector, *controls_in_action_order, status],
+            outputs=[preset, workspace_root, stage_selector, *controls_in_action_order, status],
         ).then(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
         stage_selector.change(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
         run_event = run_button.click(

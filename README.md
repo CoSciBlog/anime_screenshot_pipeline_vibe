@@ -16,7 +16,7 @@ The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local 
 - All CLI settings from `anime2sd/parse_arguments.py` are rendered as controls, grouped by the stage where they take effect. Only settings tabs for enabled stages are displayed; **General** remains available for shared paths and output options.
 - Each control displays the original argument description as inline help text, with concise quality, matching, or performance guidance where the setting affects results.
 - Stages are selected independently. Stages 1 (frame extraction) and 2 (cropping) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
-- UI profiles can be exported to and imported from TOML. Saved profiles are written beneath `configs/ui/saved/` and intentionally ignored by Git because they commonly contain local paths. Profiles can be saved from the Configuration panel or directly below the stage settings.
+- UI profiles can be exported to and imported from TOML. A single **Save profile** action stores the loaded starting preset values, stage selection, workspace root, and any field edits together in one executable profile beneath `configs/ui/saved/`. These files are intentionally ignored by Git because they commonly contain local paths.
 - A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder and create the required working structure with one button.
 - Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a profile is saved or a run starts.
 - Consecutive selected stages are executed as one pipeline segment through `automatic_pipeline.py`, so generated output flows into the next selected stage correctly.
@@ -115,7 +115,7 @@ The Pinokio start script checks the Gradio dependency before launching, captures
 
 ### Programmatic UI Access
 
-First save a profile in the UI, for example `configs/ui/saved/my_pipeline.toml`. The named Gradio endpoint `run_saved_profile` accepts that project-relative profile path and an optional comma-separated stage list.
+Choose a **Starting preset**, load and edit it as needed, then save the single resulting profile, for example `configs/ui/saved/my_pipeline.toml`. The named Gradio endpoint `run_saved_profile` accepts that project-relative profile path and an optional comma-separated stage list.
 
 Python:
 

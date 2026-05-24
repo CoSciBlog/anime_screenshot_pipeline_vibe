@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 
@@ -16,10 +17,33 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
 
     assert "Stop pipeline" in components
     assert "Shut down server" in components
+    assert "Save settings to profile" in components
     assert "stop_pipeline" in dependencies
     assert "shutdown_server" in dependencies
     assert tabs[0] == "General"
     assert tabs[-1] == "Stage 7 - Balance"
+    tab_props = {
+        component.get("props", {}).get("label"): component.get("props", {})
+        for component in config["components"]
+        if component.get("type") == "tabitem"
+    }
+    assert tab_props["Stage 0 - Download"]["visible"] is False
+    assert tab_props["Stage 3 - Classify"]["visible"] is True
+
+
+def test_stage_settings_visibility_follows_enabled_stages():
+    updates = ui.stage_tab_updates(["0", "3"])
+
+    assert updates[0]["visible"] is True
+    assert updates[1]["visible"] is False
+    assert updates[3]["visible"] is True
+
+
+def test_path_configuration_values_are_normalized_for_host_platform():
+    ref_action = next(action for action in ui.ACTIONS if action.dest == "character_ref_dir")
+    entered = r"C:/datasets/anime/references/frieren"
+
+    assert ui.config_value(ref_action, entered) == os.path.normpath(entered)
 
 
 def test_stop_pipeline_terminates_active_child_process():

@@ -33,14 +33,14 @@ ACTIVE_PIPELINE_PROCESS: subprocess.Popen[str] | None = None
 
 STAGES = OrderedDict(
     [
-        (0, ("Download", "Download anime or booru sources. Disable this step for local videos.")),
-        (1, ("Frames", "Extract frames and remove similar images.")),
-        (2, ("Crop", "Detect characters and generate image crops.")),
-        (3, ("Classify", "Assign character crops using references or clusters.")),
-        (4, ("Select", "Select, copy, and resize training images.")),
-        (5, ("Caption", "Generate tags, captions, core tags, and wildcards.")),
-        (6, ("Arrange", "Arrange training material by concepts and characters.")),
-        (7, ("Balance", "Calculate repeat weights for training.")),
+        (0, ("Download", "Download anime or booru sources. Affects source variety, size, and download time.")),
+        (1, ("Frames", "Extract frames and remove near duplicates. Reduces repetition before later analysis.")),
+        (2, ("Crop", "Detect characters and create crops. Detection choices trade recall against runtime.")),
+        (3, ("Classify", "Match crops to reference characters or clusters. This is where reference images are used.")),
+        (4, ("Select", "Build the training image set and resize exports. Controls dataset quality and disk size.")),
+        (5, ("Caption", "Generate tags and captions. Thresholds change caption precision and training signal.")),
+        (6, ("Arrange", "Organize images by concepts and characters for readable training subsets.")),
+        (7, ("Balance", "Calculate repeat weights. Changes how strongly subsets contribute during training.")),
     ]
 )
 
@@ -196,6 +196,75 @@ FIELD_GROUPS = OrderedDict(
     ]
 )
 
+DEFAULT_ENABLED_STAGES = ["3", "4", "5", "6", "7"]
+GROUP_STAGES = {
+    f"Stage {number} - {title}": number
+    for number, (title, _description) in STAGES.items()
+}
+PATH_FIELDS = {
+    "src_dir",
+    "dst_dir",
+    "log_dir",
+    "character_info_file",
+    "character_ref_dir",
+    "blacklist_tags_file",
+    "overlap_tags_file",
+    "character_tags_file",
+    "weight_csv",
+}
+FIELD_GUIDANCE = {
+    "src_dir": (
+        "Input media or the output of a prior stage; do not use this for reference images. "
+        r"Windows example: C:\datasets\anime\source."
+    ),
+    "dst_dir": r"Output root. Windows example: C:\datasets\anime\output.",
+    "character_ref_dir": (
+        "Reference image root used only in Stage 3. Create one subfolder per character, "
+        r"for example C:\datasets\anime\references\frieren\*.png."
+    ),
+    "candidate_submitters": "Narrower sources may improve consistency but can reduce available episodes.",
+    "anime_resolution": "Higher resolution can preserve detail but increases download size and later processing cost.",
+    "booru_download_limit": "More images increase coverage and download/runtime cost; low limits can miss rare poses.",
+    "booru_download_limit_per_character": "Higher limits improve per-character coverage at added download and filtering cost.",
+    "allowed_ratings": "Filtering ratings changes content distribution and may reduce usable image count.",
+    "allowed_image_classes": "Stricter classes improve dataset consistency but reduce variety.",
+    "max_download_size": "Smaller values reduce disk/runtime cost but discard fine detail during resizing.",
+    "extract_key": "Key frames run faster and reduce duplicates, but may lose useful poses.",
+    "no_remove_similar": "Keeping similar frames increases dataset size and repetition.",
+    "detect_duplicate_model": "Larger or stronger models may improve duplicate matching at greater runtime cost.",
+    "detect_duplicate_batch_size": "Larger batches can improve throughput but require more VRAM/RAM.",
+    "similar_thresh": "Higher values remove fewer near-duplicates; lower values remove more variety.",
+    "min_crop_size": "Higher values reject small/low-detail crops but yield fewer samples.",
+    "crop_with_head": "Requiring a head improves identity evidence but drops valid body-only crops.",
+    "crop_with_face": "Requiring a face strengthens identity matching but reduces recall.",
+    "detect_level": "Higher-capacity detection can improve crop recall with slower processing.",
+    "use_3stage_crop": "Additional head/halfbody crops can improve training coverage but are slow to generate.",
+    "n_add_to_ref_per_character": "Expands references after matching; may improve later runs but can propagate mistakes.",
+    "no_filter_characters": "Disabling consistency filtering retains more samples at higher label-noise risk.",
+    "keep_unnamed_clusters": "Keeps unmatched material for coverage, but it does not gain reference labels.",
+    "cluster_merge_threshold": "Controls cluster joining; permissive matching risks merging different characters.",
+    "cluster_min_samples": "Higher values suppress small clusters but can lose rare-character samples.",
+    "same_threshold_rel": "Changes noise extraction and filtering strictness, affecting character-match precision.",
+    "same_threshold_abs": "Changes noise extraction and filtering strictness for larger clusters.",
+    "no_cropped_in_dataset": "Excluding crops reduces close-up examples and dataset size.",
+    "no_original_in_dataset": "Excluding originals reduces scene/context coverage and dataset size.",
+    "no_resize": "Preserves native detail but increases storage and training preprocessing cost.",
+    "max_size": "Larger exports preserve detail but increase disk use and training cost.",
+    "filter_again": "Runs duplicate filtering again for cleaner results at extra processing time.",
+    "tagging_method": "Model choice affects tag accuracy and inference speed.",
+    "tag_threshold": "Higher thresholds improve tag precision but reduce descriptive coverage.",
+    "max_tag_number": "More tags add detail but can dilute important training concepts.",
+    "prune_mode": "Pruning removes redundant tags and changes the strength of retained concepts.",
+    "core_frequency_thresh": "Higher values mark fewer tags as core, preserving more caption detail.",
+    "use_character_prob": "Lower values reduce identity conditioning in captions.",
+    "use_tags_prob": "Lower values reduce descriptive conditioning in captions.",
+    "arrange_format": "Folder grouping affects how concepts are separated for balancing and training.",
+    "min_images_per_combination": "Higher values merge sparse concepts, improving stability but losing granularity.",
+    "min_multiply": "Sets the minimum training exposure for underrepresented groups.",
+    "max_multiply": "Caps oversampling; lower caps reduce overfitting risk for small groups.",
+    "weight_csv": "Custom weights directly alter subset exposure during training.",
+}
+
 STYLE = """
 .gradio-container {
   --frame-bg: #f2f4f2;
@@ -293,6 +362,14 @@ STYLE = """
 .settings-grid {
   padding-top: .7rem;
 }
+.settings-actions {
+  align-items: end;
+  margin-top: .8rem;
+}
+.settings-hint {
+  color: var(--muted);
+  font-size: .9rem;
+}
 .gradio-container .primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -366,6 +443,11 @@ def component_value(action: argparse.Action, value: Any) -> Any:
     return None if action.choices and shown == "" else shown
 
 
+def normalize_path_value(value: str) -> str:
+    expanded = os.path.expandvars(os.path.expanduser(value.strip()))
+    return os.path.normpath(expanded) if expanded else ""
+
+
 def parse_list(value: str) -> list[str]:
     return [item.strip() for item in re.split(r"[\n,]+", value or "") if item.strip()]
 
@@ -377,6 +459,8 @@ def config_value(action: argparse.Action, value: Any) -> Any:
         return bool(value)
     if value == "" or value is None:
         return None
+    if action.dest in PATH_FIELDS:
+        return normalize_path_value(str(value))
     if action.type in (int, float):
         return action.type(value)
     return value
@@ -393,6 +477,11 @@ def build_config(values: Iterable[Any], actions: list[argparse.Action]) -> dict[
 
 def stage_values(selected: Iterable[Any] | None) -> list[int]:
     return sorted({int(stage) for stage in (selected or [])})
+
+
+def stage_tab_updates(selected: Iterable[Any] | None):
+    enabled = set(stage_values(selected))
+    return [gr.update(visible=number in enabled) for number in STAGES]
 
 
 def profile_path(name: str) -> Path:
@@ -421,7 +510,7 @@ def load_configuration(preset: str, uploaded_path: str | None):
         status = f"Configuration loaded: {path.name}"
     else:
         status = f"Configuration not found: {path}"
-    selected = [str(stage) for stage in ui_config.get("enabled_stages", [3, 4, 5, 6, 7])]
+    selected = [str(stage) for stage in ui_config.get("enabled_stages", DEFAULT_ENABLED_STAGES)]
     updates = [gr.update(value=selected)]
     updates.extend(gr.update(value=component_value(action, config.get(action.dest))) for action in ACTIONS)
     updates.append(status)
@@ -552,6 +641,8 @@ def run_saved_profile(config_path: str, stages_text: str):
 def make_component(action: argparse.Action, value: Any):
     label = f"--{action.dest}"
     info = action.help or "Pipeline setting."
+    if action.dest in FIELD_GUIDANCE:
+        info = f"{info} Impact: {FIELD_GUIDANCE[action.dest]}"
     shown = component_value(action, value)
     if isinstance(action, argparse._StoreTrueAction):
         return gr.Checkbox(label=label, value=shown, info=info)
@@ -568,6 +659,7 @@ def make_component(action: argparse.Action, value: Any):
 def build_interface() -> gr.Blocks:
     initial = defaults()
     controls: list[Any] = []
+    stage_tabs: list[Any] = []
     grouped = {name: set(keys) for name, keys in FIELD_GROUPS.items()}
     known_fields = {key for keys in grouped.values() for key in keys}
 
@@ -580,9 +672,9 @@ def build_interface() -> gr.Blocks:
                 gr.HTML("<p class='panel-label'>Workflow</p>")
                 stage_selector = gr.CheckboxGroup(
                     choices=[(f"{number} - {details[0]}", str(number)) for number, details in STAGES.items()],
-                    value=["3", "4", "5", "6", "7"],
+                    value=DEFAULT_ENABLED_STAGES,
                     label="Stages to run",
-                    info="Stages 1 and 2 are optional; stages 3 through 7 can be enabled or disabled individually.",
+                    info="Only enabled stages are run and shown in Settings below. Stage 3 uses character references.",
                 )
                 gr.HTML(
                     "<div class='stage-grid'><table>"
@@ -619,7 +711,12 @@ def build_interface() -> gr.Blocks:
         gr.HTML("<p class='settings-label'>Settings by stage</p>")
         with gr.Tabs(elem_classes="settings-tabs"):
             for group_name, fields in FIELD_GROUPS.items():
-                with gr.Tab(group_name):
+                stage_number = GROUP_STAGES.get(group_name)
+                visible = stage_number is None or str(stage_number) in DEFAULT_ENABLED_STAGES
+                with gr.Tab(group_name, visible=visible) as tab:
+                    if stage_number is not None:
+                        stage_tabs.append(tab)
+                        gr.Markdown(STAGES[stage_number][1])
                     group_actions = [item for item in ACTIONS if item.dest in fields]
                     with gr.Column(elem_classes="settings-grid"):
                         for offset in range(0, len(group_actions), 3):
@@ -636,6 +733,16 @@ def build_interface() -> gr.Blocks:
                                 for action in remaining[offset:offset + 3]:
                                     controls.append(make_component(action, initial.get(action.dest)))
 
+        with gr.Row(elem_classes="settings-actions"):
+            with gr.Column(scale=3):
+                gr.Markdown(
+                    "Save the current visible-stage selection and all field values to the named TOML profile. "
+                    "Windows paths are normalized when saving or running.",
+                    elem_classes="settings-hint",
+                )
+            with gr.Column(scale=1):
+                settings_save_button = gr.Button("Save settings to profile", variant="primary")
+
         ordered_controls = {action.dest: control for action, control in zip(
             [item for group in FIELD_GROUPS.values() for item in ACTIONS if item.dest in group] + remaining,
             controls,
@@ -648,11 +755,17 @@ def build_interface() -> gr.Blocks:
             outputs=[status, downloaded],
             api_name="save_configuration",
         )
+        settings_save_button.click(
+            save_configuration,
+            inputs=[profile_name, stage_selector, *controls_in_action_order],
+            outputs=[status, downloaded],
+        )
         load_button.click(
             load_configuration,
             inputs=[preset, uploaded],
             outputs=[stage_selector, *controls_in_action_order, status],
-        )
+        ).then(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
+        stage_selector.change(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
         run_button.click(
             run_selected_stages,
             inputs=[stage_selector, *controls_in_action_order],

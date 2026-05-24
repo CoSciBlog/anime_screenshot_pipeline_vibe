@@ -13,16 +13,35 @@ For conversion please use [utilities/convert_metadata.py](utilities/convert_meta
 
 The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local workflow editor:
 
-- All CLI settings from `anime2sd/parse_arguments.py` are rendered as controls, grouped by the stage where they take effect.
-- Each control displays the original argument description as inline help text.
+- All CLI settings from `anime2sd/parse_arguments.py` are rendered as controls, grouped by the stage where they take effect. Only settings tabs for enabled stages are displayed; **General** remains available for shared paths and output options.
+- Each control displays the original argument description as inline help text, with concise quality, matching, or performance guidance where the setting affects results.
 - Stages are selected independently. Stages 1 (frame extraction) and 2 (cropping) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
-- UI profiles can be exported to and imported from TOML. Saved profiles are written beneath `configs/ui/saved/` and intentionally ignored by Git because they commonly contain local paths.
+- UI profiles can be exported to and imported from TOML. Saved profiles are written beneath `configs/ui/saved/` and intentionally ignored by Git because they commonly contain local paths. Profiles can be saved from the Configuration panel or directly below the stage settings.
+- Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a profile is saved or a run starts.
 - Each selected stage is run in sequence through the established `automatic_pipeline.py` implementation using one shared runtime configuration.
 - **Stop pipeline** terminates the currently active pipeline run without closing the web interface.
 - **Shut down server** terminates an active pipeline if necessary and closes the local Gradio server completely.
 
 The UI listens only on `http://127.0.0.1:7866`. Port `7866` is intentionally fixed for repeatable bookmarks and Pinokio integration. Close another service using that port before launching Frame Lab.
 The web UI is tested with Gradio `6.14.0`.
+
+### Character Reference Images
+
+Set `--character_ref_dir` under **Stage 3 - Classify**, not `--src_dir`. Reference images are consumed in Stage 3 to map detected character crops or clusters to known character names; later stages use the resulting metadata rather than reading the reference folder again.
+
+The recommended Windows layout is one subfolder per character:
+
+```text
+C:\datasets\anime\references\
+|-- frieren\
+|   |-- front_01.png
+|   `-- portrait_02.webp
+`-- fern\
+    |-- reference_01.jpg
+    `-- reference_02.png
+```
+
+Nested folder names become character labels. Images directly inside `references` are also supported: their label is taken from the file name up to the first underscore, for example `frieren_01.png` becomes `frieren`. Subfolders are preferable because the label is explicit and each character can hold multiple reference images.
 
 ### Windows Quick Start
 

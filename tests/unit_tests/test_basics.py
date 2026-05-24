@@ -1,5 +1,10 @@
+import logging
+
 import pytest
+from PIL import Image
+
 from anime2sd.basics import parse_anime_info
+from anime2sd.common_preprocess import rearrange_related_files
 
 
 @pytest.mark.parametrize(
@@ -37,3 +42,14 @@ from anime2sd.basics import parse_anime_info
 )
 def test_parse_anime_info(filename, expected):
     assert parse_anime_info(filename) == expected
+
+
+def test_rearrange_related_files_reports_generated_metadata_once(tmp_path, caplog):
+    Image.new("RGB", (16, 16), color="white").save(tmp_path / "frame.png")
+
+    with caplog.at_level(logging.INFO):
+        rearrange_related_files(str(tmp_path))
+
+    assert (tmp_path / ".frame_meta.json").exists()
+    assert "Created default metadata for 1 image(s)" in caplog.text
+    assert "No related file found" not in caplog.text

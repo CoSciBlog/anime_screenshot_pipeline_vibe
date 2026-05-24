@@ -17,7 +17,10 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
 
     assert "Stop pipeline" in components
     assert "Shut down server" in components
+    assert "Workspace root" in components
+    assert "Create workspace folders" in components
     assert "Save settings to profile" in components
+    assert "create_workspace" in dependencies
     assert "stop_pipeline" in dependencies
     assert "shutdown_server" in dependencies
     assert tabs[0] == "General"
@@ -46,13 +49,29 @@ def test_path_configuration_values_are_normalized_for_host_platform():
     assert ui.config_value(ref_action, entered) == os.path.normpath(entered)
 
 
+def test_workspace_structure_maps_and_creates_all_pipeline_directories(tmp_path):
+    src, dst, ref, logs, status = ui.create_workspace_structure(str(tmp_path))
+
+    assert src["value"] == str(tmp_path / "src")
+    assert dst["value"] == str(tmp_path / "dst")
+    assert ref["value"] == str(tmp_path / "ref")
+    assert logs["value"] == str(tmp_path / "logs")
+    assert "Workspace ready" in status
+    for relative_path in ui.WORKSPACE_DIRECTORIES:
+        assert (tmp_path / relative_path).is_dir()
+
+
+def test_consecutive_selected_stages_are_run_as_one_pipeline_segment():
+    assert ui.stage_ranges([2, 3, 5, 6, 7]) == [(2, 3), (5, 7)]
+
+
 def test_stop_pipeline_terminates_active_child_process():
     process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     try:
         with ui.PIPELINE_PROCESS_LOCK:
             ui.ACTIVE_PIPELINE_PROCESS = process
 
-        assert ui.stop_pipeline() == "Stopping the active pipeline..."
+        assert ui.stop_pipeline() == "Pipeline stopped."
         assert process.poll() is not None
         assert ui.stop_pipeline() == "No pipeline process is currently running."
     finally:

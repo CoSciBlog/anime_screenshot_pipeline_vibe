@@ -17,17 +17,34 @@ The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local 
 - Each control displays the original argument description as inline help text, with concise quality, matching, or performance guidance where the setting affects results.
 - Stages are selected independently. Stages 1 (frame extraction) and 2 (cropping) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
 - UI profiles can be exported to and imported from TOML. Saved profiles are written beneath `configs/ui/saved/` and intentionally ignored by Git because they commonly contain local paths. Profiles can be saved from the Configuration panel or directly below the stage settings.
+- A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder and create the required working structure with one button.
 - Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a profile is saved or a run starts.
-- Each selected stage is run in sequence through the established `automatic_pipeline.py` implementation using one shared runtime configuration.
-- **Stop pipeline** terminates the currently active pipeline run without closing the web interface.
+- Consecutive selected stages are executed as one pipeline segment through `automatic_pipeline.py`, so generated output flows into the next selected stage correctly.
+- **Stop pipeline** cancels the active UI run and terminates its pipeline process tree without closing the web interface.
 - **Shut down server** terminates an active pipeline if necessary and closes the local Gradio server completely.
 
 The UI listens only on `http://127.0.0.1:7866`. Port `7866` is intentionally fixed for repeatable bookmarks and Pinokio integration. Close another service using that port before launching Frame Lab.
 The web UI is tested with Gradio `6.14.0`.
 
+### Workspace Root
+
+Enter one directory in **Workspace root**, for example `C:\datasets\anime\frieren_project`, and choose **Create workspace folders**. While this root is set, it takes precedence over manually entered General path fields for saved profiles and pipeline runs:
+
+```text
+C:\datasets\anime\frieren_project\
+|-- src\                 # Input for the first enabled stage
+|-- ref\                 # Character reference images for Stage 3
+|-- logs\                # Pipeline log files
+`-- dst\
+    |-- intermediate\    # Generated raw, cropped, and classified working data
+    `-- training\        # Final selected and captioned training data
+```
+
+The content expected in `src` depends on the first enabled stage: videos for Stage 1, raw images for Stage 2, or already cropped images when starting directly at Stage 3. Keep processing stages that depend on each other's output enabled consecutively, for example Stages 2 and 3 together.
+
 ### Character Reference Images
 
-Set `--character_ref_dir` under **Stage 3 - Classify**, not `--src_dir`. Reference images are consumed in Stage 3 to map detected character crops or clusters to known character names; later stages use the resulting metadata rather than reading the reference folder again.
+Set `--character_ref_dir` under **Stage 3 - Classify**, or use the workspace `ref` directory. Reference images are consumed in Stage 3 to map detected character crops or clusters to known character names; later stages use the resulting metadata rather than reading the reference folder again.
 
 The recommended Windows layout is one subfolder per character:
 
@@ -42,6 +59,10 @@ C:\datasets\anime\references\
 ```
 
 Nested folder names become character labels. Images directly inside `references` are also supported: their label is taken from the file name up to the first underscore, for example `frieren_01.png` becomes `frieren`. Subfolders are preferable because the label is explicit and each character can hold multiple reference images.
+
+### Preprocessing Messages
+
+On the first processing pass, raw source images commonly do not yet have companion `_meta.json` files. The pipeline creates default metadata for those images before classification and later processing. This is expected initialization, not a failed match or missing image; the UI now reports it as one informational summary instead of one warning per image.
 
 ### Windows Quick Start
 

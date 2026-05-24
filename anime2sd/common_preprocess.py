@@ -44,6 +44,7 @@ def rearrange_related_files(src_dir: str, logger: Optional[logging.Logger] = Non
         logger = logging.getLogger()
     all_files = construct_file_list(src_dir)
     image_files = get_images_recursively(src_dir)
+    default_metadata_count = 0
 
     logger.info("Arranging related files ...")
     for img_path in tqdm(image_files, desc="Rearranging related files"):
@@ -55,16 +56,21 @@ def rearrange_related_files(src_dir: str, logger: Optional[logging.Logger] = Non
                 found_path = all_files.get(os.path.basename(related_path))
                 if found_path is None:
                     if related_path.endswith("json"):
-                        logger.warning(f"No related file found for {related_path}")
                         meta_data = get_default_metadata(img_path)
                         with open(related_path, "w") as f:
                             json.dump(meta_data, f)
+                        default_metadata_count += 1
                 else:
                     # Move the found file to the expected location
                     shutil.move(found_path, related_path)
                     logger.info(
                         f"Moved related file from {found_path} " f"to {related_path}"
                     )
+    if default_metadata_count:
+        logger.info(
+            "Created default metadata for %d image(s) without existing metadata.",
+            default_metadata_count,
+        )
 
 
 def load_metadata_from_aux(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -30,6 +31,7 @@ PIPELINE_PROCESS_LOCK = threading.Lock()
 PIPELINE_RUN_LOCK = threading.Lock()
 PIPELINE_STOP_REQUESTED = threading.Event()
 ACTIVE_PIPELINE_PROCESS: subprocess.Popen[str] | None = None
+WORKSPACE_DIRECTORIES = ("src", "dst", "dst/intermediate", "dst/training", "ref", "logs")
 
 STAGES = OrderedDict(
     [
@@ -214,13 +216,13 @@ PATH_FIELDS = {
 }
 FIELD_GUIDANCE = {
     "src_dir": (
-        "Input media or the output of a prior stage; do not use this for reference images. "
-        r"Windows example: C:\datasets\anime\source."
+        "Input media for the first selected stage; do not use this for reference images. "
+        r"The workspace button maps this to <root>\src."
     ),
-    "dst_dir": r"Output root. Windows example: C:\datasets\anime\output.",
+    "dst_dir": r"Output root. The workspace button maps this to <root>\dst, which contains intermediate and training output.",
     "character_ref_dir": (
         "Reference image root used only in Stage 3. Create one subfolder per character, "
-        r"for example C:\datasets\anime\references\frieren\*.png."
+        r"for example <root>\ref\frieren\*.png."
     ),
     "candidate_submitters": "Narrower sources may improve consistency but can reduce available episodes.",
     "anime_resolution": "Higher resolution can preserve detail but increases download size and later processing cost.",
@@ -370,6 +372,17 @@ STYLE = """
   color: var(--muted);
   font-size: .9rem;
 }
+.workspace-card {
+  margin: .2rem 0 .85rem;
+  padding: .8rem;
+  border-radius: .55rem;
+  border: 1px solid var(--line);
+  background: var(--panel-raised);
+}
+.workspace-card .prose {
+  color: var(--muted);
+  font-size: .89rem;
+}
 .gradio-container .primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -475,8 +488,63 @@ def build_config(values: Iterable[Any], actions: list[argparse.Action]) -> dict[
     return config
 
 
+def workspace_paths(root_value: str) -> dict[str, str]:
+    root_path = normalize_path_value(root_value)
+    if not root_path:
+        return {}
+    root = Path(root_path)
+    return {
+        "src_dir": str(root / "src"),
+        "dst_dir": str(root / "dst"),
+        "character_ref_dir": str(root / "ref"),
+        "log_dir": str(root / "logs"),
+    }
+
+
+def apply_workspace_paths(root_value: str, config: dict[str, Any]) -> dict[str, Any]:
+    mapped = dict(config)
+    mapped.update(workspace_paths(root_value))
+    return mapped
+
+
+def create_workspace_structure(root_value: str):
+    paths = workspace_paths(root_value)
+    if not paths:
+        return (
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            "Enter a workspace root before creating folders.",
+        )
+    root = Path(normalize_path_value(root_value))
+    for relative_path in WORKSPACE_DIRECTORIES:
+        (root / relative_path).mkdir(parents=True, exist_ok=True)
+    status = (
+        f"Workspace ready: `{root}`. Place first-stage input in `src`, "
+        "character references in `ref`, and outputs will be written under `dst`."
+    )
+    return (
+        gr.update(value=paths["src_dir"]),
+        gr.update(value=paths["dst_dir"]),
+        gr.update(value=paths["character_ref_dir"]),
+        gr.update(value=paths["log_dir"]),
+        status,
+    )
+
+
 def stage_values(selected: Iterable[Any] | None) -> list[int]:
     return sorted({int(stage) for stage in (selected or [])})
+
+
+def stage_ranges(stages: list[int]) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
+    for stage in sorted(stages):
+        if ranges and stage == ranges[-1][1] + 1:
+            ranges[-1] = (ranges[-1][0], stage)
+        else:
+            ranges.append((stage, stage))
+    return ranges
 
 
 def stage_tab_updates(selected: Iterable[Any] | None):
@@ -489,10 +557,14 @@ def profile_path(name: str) -> Path:
     return SAVED_CONFIG_DIR / f"{cleaned}.toml"
 
 
-def save_configuration(name: str, selected: list[str], *values: Any):
+def save_configuration(name: str, workspace_root: str, selected: list[str], *values: Any):
     SAVED_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    config = build_config(values, ACTIONS)
-    config["ui"] = {"enabled_stages": stage_values(selected), "fixed_port": PORT}
+    config = apply_workspace_paths(workspace_root, build_config(values, ACTIONS))
+    config["ui"] = {
+        "enabled_stages": stage_values(selected),
+        "fixed_port": PORT,
+        "workspace_root": normalize_path_value(workspace_root),
+    }
     path = profile_path(name)
     with path.open("w", encoding="utf-8") as handle:
         toml.dump(config, handle)
@@ -511,10 +583,25 @@ def load_configuration(preset: str, uploaded_path: str | None):
     else:
         status = f"Configuration not found: {path}"
     selected = [str(stage) for stage in ui_config.get("enabled_stages", DEFAULT_ENABLED_STAGES)]
-    updates = [gr.update(value=selected)]
+    workspace_root = ui_config.get("workspace_root", "")
+    updates = [gr.update(value=workspace_root), gr.update(value=selected)]
     updates.extend(gr.update(value=component_value(action, config.get(action.dest))) for action in ACTIONS)
     updates.append(status)
     return updates
+
+
+def terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+    else:
+        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
 
 
 def stop_pipeline() -> str:
@@ -524,12 +611,12 @@ def stop_pipeline() -> str:
         if process is None or process.poll() is not None:
             return "No pipeline process is currently running."
         PIPELINE_STOP_REQUESTED.set()
-        process.terminate()
+        terminate_process_tree(process)
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         process.kill()
-    return "Stopping the active pipeline..."
+    return "Pipeline stopped."
 
 
 def shutdown_server() -> str:
@@ -562,13 +649,15 @@ def execute_config(stages: list[int], config: dict[str, Any]):
             f"Runtime configuration: {RUNTIME_CONFIG.relative_to(ROOT)}",
             f"Stages: {', '.join(str(stage) for stage in stages)}",
         ]
-        for stage in stages:
+        for start_stage, end_stage in stage_ranges(stages):
             if PIPELINE_STOP_REQUESTED.is_set():
                 history.append("Pipeline stopped by user.")
                 yield "\n".join(history)
                 return
-            title = STAGES[stage][0]
-            history.append(f"\n--- Stage {stage}: {title} ---")
+            titles = ", ".join(
+                f"{stage}: {STAGES[stage][0]}" for stage in range(start_stage, end_stage + 1)
+            )
+            history.append(f"\n--- Stages {titles} ---")
             yield "\n".join(history)
             command = [
                 sys.executable,
@@ -576,10 +665,15 @@ def execute_config(stages: list[int], config: dict[str, Any]):
                 "--base_config_file",
                 str(RUNTIME_CONFIG),
                 "--start_stage",
-                str(stage),
+                str(start_stage),
                 "--end_stage",
-                str(stage),
+                str(end_stage),
             ]
+            popen_options: dict[str, Any] = {}
+            if os.name == "nt":
+                popen_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                popen_options["start_new_session"] = True
             process = subprocess.Popen(
                 command,
                 cwd=ROOT,
@@ -587,6 +681,7 @@ def execute_config(stages: list[int], config: dict[str, Any]):
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                **popen_options,
             )
             with PIPELINE_PROCESS_LOCK:
                 ACTIVE_PIPELINE_PROCESS = process
@@ -604,10 +699,12 @@ def execute_config(stages: list[int], config: dict[str, Any]):
                 yield "\n".join(history)
                 return
             if return_code != 0:
-                history.append(f"Stage {stage} failed with exit code {return_code}.")
+                history.append(
+                    f"Stages {start_stage}-{end_stage} failed with exit code {return_code}."
+                )
                 yield "\n".join(history)
                 return
-            history.append(f"Stage {stage} completed.")
+            history.append(f"Stages {start_stage}-{end_stage} completed.")
         history.append("All selected stages completed.")
         yield "\n".join(history)
     finally:
@@ -615,13 +712,14 @@ def execute_config(stages: list[int], config: dict[str, Any]):
             process = ACTIVE_PIPELINE_PROCESS
             ACTIVE_PIPELINE_PROCESS = None
         if process is not None and process.poll() is None:
-            process.terminate()
+            terminate_process_tree(process)
         PIPELINE_STOP_REQUESTED.clear()
         PIPELINE_RUN_LOCK.release()
 
 
-def run_selected_stages(selected: list[str], *values: Any):
-    yield from execute_config(stage_values(selected), build_config(values, ACTIONS))
+def run_selected_stages(selected: list[str], workspace_root: str, *values: Any):
+    config = apply_workspace_paths(workspace_root, build_config(values, ACTIONS))
+    yield from execute_config(stage_values(selected), config)
 
 
 def run_saved_profile(config_path: str, stages_text: str):
@@ -690,6 +788,21 @@ def build_interface() -> gr.Blocks:
                 output = gr.Textbox(label="Run log", lines=18, interactive=False)
             with gr.Column(scale=1, elem_classes="run-panel"):
                 gr.HTML("<p class='panel-label'>Configuration</p>")
+                with gr.Column(elem_classes="workspace-card"):
+                    workspace_root = gr.Textbox(
+                        label="Workspace root",
+                        value="",
+                        placeholder=r"C:\datasets\anime\my_project",
+                        info=(
+                            "Optional single working root. When set, runs and saved profiles use "
+                            "<root>\\src, <root>\\dst, <root>\\ref, and <root>\\logs."
+                        ),
+                    )
+                    create_workspace_button = gr.Button("Create workspace folders")
+                    gr.Markdown(
+                        "`src` = first-stage input, `ref` = character reference images, "
+                        "`dst/intermediate` and `dst/training` = generated pipeline data."
+                    )
                 preset = gr.Dropdown(
                     choices=[
                         "configs/pipelines/screenshots.toml",
@@ -748,27 +861,40 @@ def build_interface() -> gr.Blocks:
             controls,
         )}
         controls_in_action_order = [ordered_controls[action.dest] for action in ACTIONS]
+        workspace_path_outputs = [
+            ordered_controls["src_dir"],
+            ordered_controls["dst_dir"],
+            ordered_controls["character_ref_dir"],
+            ordered_controls["log_dir"],
+        ]
+
+        create_workspace_button.click(
+            create_workspace_structure,
+            inputs=workspace_root,
+            outputs=[*workspace_path_outputs, status],
+            api_name="create_workspace",
+        )
 
         save_button.click(
             save_configuration,
-            inputs=[profile_name, stage_selector, *controls_in_action_order],
+            inputs=[profile_name, workspace_root, stage_selector, *controls_in_action_order],
             outputs=[status, downloaded],
             api_name="save_configuration",
         )
         settings_save_button.click(
             save_configuration,
-            inputs=[profile_name, stage_selector, *controls_in_action_order],
+            inputs=[profile_name, workspace_root, stage_selector, *controls_in_action_order],
             outputs=[status, downloaded],
         )
         load_button.click(
             load_configuration,
             inputs=[preset, uploaded],
-            outputs=[stage_selector, *controls_in_action_order, status],
+            outputs=[workspace_root, stage_selector, *controls_in_action_order, status],
         ).then(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
         stage_selector.change(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
-        run_button.click(
+        run_event = run_button.click(
             run_selected_stages,
-            inputs=[stage_selector, *controls_in_action_order],
+            inputs=[stage_selector, workspace_root, *controls_in_action_order],
             outputs=output,
             api_name="run_from_form",
             concurrency_limit=1,
@@ -778,7 +904,9 @@ def build_interface() -> gr.Blocks:
             stop_pipeline,
             outputs=output,
             api_name="stop_pipeline",
+            cancels=[run_event],
             concurrency_limit=None,
+            concurrency_id="pipeline_control",
         )
         shutdown_button.click(
             shutdown_server,

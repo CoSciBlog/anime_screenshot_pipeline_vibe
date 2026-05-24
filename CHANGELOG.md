@@ -7,6 +7,9 @@
 - Redesigned the UI with separate light/dark styling, per-stage setting tabs, and English interface text.
 - Updated stage settings to show only enabled stage tabs, add stage purpose summaries, and expose concise quality, matching, and performance guidance for impactful options.
 - Added Windows path normalization, documented the Stage 3 character-reference folder layout, and added a direct `Save settings to profile` action below the stage settings.
+- Added a workspace-root workflow that creates `src`, `ref`, `logs`, `dst/intermediate`, and `dst/training` folders and applies their paths to saved and executed configurations.
+- Fixed UI stage execution so consecutive selected stages share one pipeline run, preserving generated intermediate data between dependent stages.
+- Replaced per-image missing-metadata warnings with one informational initialization summary and made **Stop pipeline** cancel the running UI task while terminating its process tree.
 - Added `Stop pipeline` and `Shut down server` controls with named Gradio API endpoints.
 - Updated the Python dependency set for Python 3.10, including Gradio `6.14.0`, Transformers `5.9.0`, and current compatible image-processing dependencies while preserving CUDA PyTorch installation.
 - Added focused UI/process-control and terminal-logging unit tests, reproducible `requirements-dev.txt`, and stable pytest collection for optional-data integration tests.

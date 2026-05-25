@@ -1,4 +1,5 @@
 import logging
+import importlib
 
 import numpy as np
 from PIL import Image
@@ -10,6 +11,8 @@ from anime2sd.classif.file_utils import (
     save_to_dir,
 )
 from automatic_pipeline import cleanup_classified_aux_files
+
+classification = importlib.import_module("anime2sd.classif.classify_characters")
 
 
 def test_episode_key_uses_episode_folder_or_file_pattern():
@@ -85,3 +88,40 @@ def test_classified_output_stores_json_and_npy_in_metadata_subfolder(tmp_path):
     assert (character_dir / "metadata" / ".frame_ccip.npy").exists()
     assert not (character_dir / ".frame_meta.json").exists()
     assert not (character_dir / ".frame_ccip.npy").exists()
+
+
+def test_large_classification_chunks_quadratic_similarity_work(tmp_path, monkeypatch):
+    image_files = np.array([str(tmp_path / f"frame_{index}.png") for index in range(10)])
+    images = np.arange(20).reshape(10, 2)
+    chunk_lengths = []
+    saved_labels = []
+
+    monkeypatch.setattr(
+        classification,
+        "load_image_features_and_characters",
+        lambda *args, **kwargs: (image_files, images, None, {}),
+    )
+
+    def classify_batch(files, *_args):
+        chunk_lengths.append(len(files))
+        return np.zeros(len(files), dtype=int), {}
+
+    monkeypatch.setattr(classification, "_classify_feature_batch", classify_batch)
+    monkeypatch.setattr(classification, "remove_empty_folders", lambda _path: None)
+    monkeypatch.setattr(
+        classification,
+        "save_to_dir",
+        lambda _files, _images, _dst, labels, *_args, **_kwargs: saved_labels.extend(labels),
+    )
+
+    classification.classify_from_directory(
+        str(tmp_path),
+        str(tmp_path / "classified"),
+        to_extract_from_noise=False,
+        to_filter=False,
+        clu_min_samples=2,
+        classification_chunk_size=4,
+    )
+
+    assert chunk_lengths == [4, 4, 2]
+    assert saved_labels == [0, 0, 0, 0, 1, 1, 1, 1, 2, 2]

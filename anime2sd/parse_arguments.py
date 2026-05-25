@@ -433,6 +433,16 @@ def create_parser():
         help="Minimum cluster samples in character clusterining",
     )
     parser.add_argument(
+        "--classification_chunk_size",
+        type=int,
+        default=4096,
+        help=(
+            "Maximum number of Stage 3 image features compared in one CCIP/OPTICS "
+            "operation. Limits quadratic RAM/VRAM use for large datasets. "
+            "Set to 0 only when the whole dataset safely fits in memory."
+        ),
+    )
+    parser.add_argument(
         "--same_threshold_rel",
         type=float,
         default=0.6,

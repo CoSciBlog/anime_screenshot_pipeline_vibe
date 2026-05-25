@@ -20,15 +20,17 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
     assert "Workspace root" in components
     assert "Create workspace folders" in components
     assert "Clear generated output" in components
-    assert "Save profile" in components
-    assert "Saved profile" not in components
-    assert "Save settings to profile" not in components
+    assert "Save configuration" in components
+    assert "Export settings" in components
+    assert "Starting preset" not in components
+    assert "Import configuration" in components
     assert "Stage guide" in components
     assert "Configuration" in components
     assert "Programmatic access" not in components
     assert "--max_images_per_character" in components
     assert "--max_images_per_character_per_episode" in components
     assert "--remove_classified_aux_files" in components
+    assert "--classification_chunk_size" in components
     assert "create_workspace" in dependencies
     assert "clear_workspace_output" in dependencies
     assert "run_saved_profile" in dependencies
@@ -160,7 +162,7 @@ def test_consecutive_selected_stages_are_run_as_one_pipeline_segment():
     assert ui.stage_ranges([2, 3, 5, 6, 7]) == [(2, 3), (5, 7)]
 
 
-def test_saved_profile_records_the_starting_preset_with_ui_settings(tmp_path, monkeypatch):
+def test_saved_configuration_records_stages_and_exports_same_file(tmp_path, monkeypatch):
     values = [
         ui.component_value(action, ui.defaults().get(action.dest))
         for action in ui.ACTIONS
@@ -168,9 +170,8 @@ def test_saved_profile_records_the_starting_preset_with_ui_settings(tmp_path, mo
     monkeypatch.setattr(ui, "ROOT", tmp_path)
     monkeypatch.setattr(ui, "SAVED_CONFIG_DIR", tmp_path / "configs" / "ui" / "saved")
 
-    _status, preset_update = ui.save_configuration(
+    _status, export_path = ui.save_configuration(
         "combined",
-        "configs/pipelines/booru.toml",
         r"C:\datasets\anime\project",
         ["2", "3"],
         *values,
@@ -178,11 +179,9 @@ def test_saved_profile_records_the_starting_preset_with_ui_settings(tmp_path, mo
     output_path = ui.SAVED_CONFIG_DIR / "combined.toml"
     saved = ui.toml.load(output_path)
 
-    assert saved["ui"]["source_preset"] == "configs/pipelines/booru.toml"
     assert saved["ui"]["enabled_stages"] == [2, 3]
     assert saved["ui"]["workspace_root"] == os.path.normpath(r"C:\datasets\anime\project")
-    assert preset_update["value"] == "configs/ui/saved/combined.toml"
-    assert "configs/ui/saved/combined.toml" in preset_update["choices"]
+    assert export_path == str(output_path)
 
 
 def test_running_from_form_creates_missing_workspace_folders(tmp_path, monkeypatch):

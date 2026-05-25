@@ -247,6 +247,110 @@ def select_to_add_to_ref(
     return np.array(selected_indices), np.array(labels)
 
 
+def _classify_feature_batch(
+    image_files: np.ndarray,
+    images: np.ndarray,
+    characters_per_image: Optional[np.ndarray],
+    ref_images: Optional[np.ndarray],
+    ref_labels: Optional[np.ndarray],
+    n_meta_labels: int,
+    n_pre_labels: int,
+    to_extract_from_noise: bool,
+    to_filter: bool,
+    keep_unnamed: bool,
+    accept_multiple_candidates: bool,
+    clu_min_samples: int,
+    merge_threshold: float,
+    same_threshold_rel: float,
+    same_threshold_abs: int,
+    logger: logging.Logger,
+) -> Tuple[np.ndarray, Dict[int, List[np.ndarray]]]:
+    """Classify one memory-bounded feature batch and return its labels."""
+    labels, batch_diff, batch_same = cluster_characters_basics(
+        images,
+        clu_min_samples=clu_min_samples,
+        logger=logger,
+    )
+    labels[labels >= 0] += n_pre_labels
+
+    if to_extract_from_noise:
+        extract_from_noise(
+            image_files,
+            images,
+            labels=labels,
+            batch_diff=batch_diff,
+            batch_same=batch_same,
+            characters_per_image=characters_per_image,
+            ref_images=ref_images,
+            ref_labels=ref_labels,
+            same_threshold_rel=same_threshold_rel,
+            same_threshold_abs=same_threshold_abs,
+            logger=logger,
+        )
+
+    updated_indices_mapping: Dict[int, List[np.ndarray]] = {}
+    if ref_images is not None:
+        labels, updated_indices_mapping = map_clusters_to_reference(
+            images,
+            ref_images,
+            ref_labels,
+            cluster_ids=labels,
+            same_threshold=0.01,
+            characters_per_image=characters_per_image,
+            logger=logger,
+        )
+
+    if characters_per_image is not None:
+        labels, updated_indices_mapping_tmp = map_clusters_to_existing(
+            labels,
+            characters_per_image[:, :n_meta_labels],
+            n_pre_labels,
+            min_proportion=0.6,
+            accept_multiple_candidates=accept_multiple_candidates,
+            logger=logger,
+        )
+        for meta_label, index_groups in updated_indices_mapping_tmp.items():
+            updated_indices_mapping.setdefault(meta_label, []).extend(index_groups)
+
+    if keep_unnamed:
+        merge_clusters(
+            labels,
+            batch_same,
+            min_merge_id=n_pre_labels,
+            merge_threshold=merge_threshold,
+            characters_per_image=characters_per_image,
+            logger=logger,
+        )
+    else:
+        labels[labels >= n_pre_labels] = -1
+
+    if to_extract_from_noise:
+        extract_from_noise(
+            image_files,
+            images,
+            labels=labels,
+            batch_diff=batch_diff,
+            batch_same=batch_same,
+            characters_per_image=characters_per_image,
+            same_threshold_rel=same_threshold_rel,
+            same_threshold_abs=same_threshold_abs,
+            logger=logger,
+        )
+
+    if to_filter:
+        labels = filter_characters_from_images(
+            image_files,
+            images,
+            labels,
+            batch_diff,
+            batch_same,
+            same_threshold_rel=same_threshold_rel,
+            same_threshold_abs=same_threshold_abs,
+            logger=logger,
+        )
+    return labels, updated_indices_mapping
+
+
 def classify_from_directory(
     src_dir: str,
     dst_dir: str,
@@ -263,6 +367,7 @@ def classify_from_directory(
     n_add_images_to_ref: int = 0,
     max_images_per_character: int = 0,
     max_images_per_character_per_episode: int = 0,
+    classification_chunk_size: int = 4096,
     move: bool = False,
     logger: Optional[logging.Logger] = None,
 ):
@@ -319,6 +424,9 @@ def classify_from_directory(
         max_images_per_character_per_episode (int):
             Maximum number of classified images saved for each known character
             within an inferred episode.
+        classification_chunk_size (int):
+            Maximum number of features compared in one quadratic CCIP/OPTICS
+            operation. Set to 0 to process all images in one operation.
         move (bool):
             Whether to move or copy files
         logger (Optional[logging.Logger]):
@@ -339,12 +447,6 @@ def classify_from_directory(
     if ignore_character_metadata:
         characters_per_image = None
         character_mapping = dict()
-
-    labels, batch_diff, batch_same = cluster_characters_basics(
-        images,
-        clu_min_samples=clu_min_samples,
-        logger=logger,
-    )
 
     # The number of known character names from metadata
     n_meta_labels = len(character_mapping)
@@ -367,98 +469,71 @@ def classify_from_directory(
 
     # The number of known character names from either reference or metadata
     n_pre_labels = len(character_mapping)
-    labels[labels >= 0] += n_pre_labels
-
-    if to_extract_from_noise:
-        extract_from_noise(
-            image_files,
-            images,
-            labels=labels,
-            batch_diff=batch_diff,
-            batch_same=batch_same,
-            characters_per_image=characters_per_image,
-            ref_images=ref_images,
-            ref_labels=ref_labels,
-            same_threshold_rel=same_threshold_rel,
-            same_threshold_abs=same_threshold_abs,
-            logger=logger,
-        )
-
-    updated_indices_mapping = dict()
-
-    if ref_images is not None:
-        # Use a low threshold here because cluster may represent
-        # different forms of the same character
-        labels, updated_indices_mapping = map_clusters_to_reference(
-            images,
-            ref_images,
-            ref_labels,
-            cluster_ids=labels,
-            same_threshold=0.01,
-            characters_per_image=characters_per_image,
-            logger=logger,
-        )
-
-    if characters_per_image is not None:
-        labels, updated_indices_mapping_tmp = map_clusters_to_existing(
-            labels,
-            # Only retrieve the part that come from metadata
-            characters_per_image[:, :n_meta_labels],
-            n_pre_labels,
-            min_proportion=0.6,
-            accept_multiple_candidates=accept_multiple_candidates,
-            logger=logger,
-        )
-        for meta_label in updated_indices_mapping_tmp:
-            if meta_label in updated_indices_mapping:
-                updated_indices_mapping[meta_label].extend(
-                    updated_indices_mapping_tmp[meta_label]
-                )
-            else:
-                updated_indices_mapping[meta_label] = updated_indices_mapping_tmp[
-                    meta_label
-                ]
-
     if ref_images is None and characters_per_image is None:
         keep_unnamed = True
 
-    if keep_unnamed:
-        # trying to merge clusters
-        merge_clusters(
-            labels,
-            batch_same,
-            min_merge_id=n_pre_labels,
-            merge_threshold=merge_threshold,
-            characters_per_image=characters_per_image,
-            logger=logger,
+    total_images = len(images)
+    chunk_size = total_images if classification_chunk_size <= 0 else classification_chunk_size
+    chunk_size = max(clu_min_samples, chunk_size)
+    if total_images > chunk_size:
+        logger.info(
+            "Large dataset classification: processing %d image(s) in memory-bounded "
+            "chunks of at most %d to avoid quadratic similarity allocation.",
+            total_images,
+            chunk_size,
         )
-    else:
-        labels[labels >= n_pre_labels] = -1
-
-    if to_extract_from_noise:
-        extract_from_noise(
-            image_files,
-            images,
-            labels=labels,
-            batch_diff=batch_diff,
-            batch_same=batch_same,
-            characters_per_image=characters_per_image,
-            same_threshold_rel=same_threshold_rel,
-            same_threshold_abs=same_threshold_abs,
-            logger=logger,
+    label_batches: List[np.ndarray] = []
+    updated_indices_mapping: Dict[int, List[np.ndarray]] = {}
+    unnamed_label_offset = 0
+    batch_ranges = [
+        (start, min(start + chunk_size, total_images))
+        for start in range(0, total_images, chunk_size)
+    ]
+    if len(batch_ranges) > 1 and batch_ranges[-1][1] - batch_ranges[-1][0] < clu_min_samples:
+        batch_ranges[-2] = (batch_ranges[-2][0], batch_ranges[-1][1])
+        batch_ranges.pop()
+    for start, end in batch_ranges:
+        if total_images > chunk_size:
+            logger.info(
+                "Classifying similarity chunk %d-%d of %d image(s) ...",
+                start + 1,
+                end,
+                total_images,
+            )
+        batch_characters = (
+            characters_per_image[start:end]
+            if characters_per_image is not None
+            else None
         )
-
-    if to_filter:
-        labels = filter_characters_from_images(
-            image_files,
-            images,
-            labels,
-            batch_diff,
-            batch_same,
-            same_threshold_rel=same_threshold_rel,
-            same_threshold_abs=same_threshold_abs,
-            logger=logger,
+        batch_labels, batch_updates = _classify_feature_batch(
+            image_files[start:end],
+            images[start:end],
+            batch_characters,
+            ref_images,
+            ref_labels,
+            n_meta_labels,
+            n_pre_labels,
+            to_extract_from_noise,
+            to_filter,
+            keep_unnamed,
+            accept_multiple_candidates,
+            clu_min_samples,
+            merge_threshold,
+            same_threshold_rel,
+            same_threshold_abs,
+            logger,
         )
+        unnamed_labels = batch_labels >= n_pre_labels
+        if unnamed_labels.any():
+            local_max = int(batch_labels[unnamed_labels].max())
+            batch_labels[unnamed_labels] += unnamed_label_offset
+            unnamed_label_offset += local_max - n_pre_labels + 1
+        label_batches.append(batch_labels)
+        for label, index_groups in batch_updates.items():
+            updated_indices_mapping.setdefault(label, []).extend(
+                indices + start for indices in index_groups
+            )
+    labels = np.concatenate(label_batches) if label_batches else np.array([], dtype=int)
 
     if n_add_images_to_ref > 0:
         selected_indices, labels_for_ref = select_to_add_to_ref(

@@ -14,12 +14,12 @@ For conversion please use [utilities/convert_metadata.py](utilities/convert_meta
 The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local workflow editor:
 
 - All CLI settings from `anime2sd/parse_arguments.py` are rendered as controls, grouped by the stage where they take effect. Only settings tabs for enabled stages are displayed; **General** remains available for shared paths and output options.
-- **Workflow** is shown first, followed by an optional, collapsible two-column **Configuration** panel for workspace and profile management.
+- **Workflow** is shown first, followed by an optional, collapsible two-column **Configuration** panel for workspace and TOML configuration management.
 - Each control displays the original argument description as inline help text, with concise quality, matching, or performance guidance where the setting affects results.
 - Stages are selected independently. Stages 1 (frame extraction) and 2 (cropping) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
-- UI profiles can be imported from TOML. A single **Save profile** action stores the loaded starting preset values, stage selection, workspace root, and any field edits together in one executable profile beneath `configs/ui/saved/`, then adds that profile to the **Starting preset** list. These files are intentionally ignored by Git because they commonly contain local paths.
+- The UI uses one TOML configuration file per workflow. **Save configuration** stores stage selection, workspace root, and every setting together beneath `configs/ui/saved/`; **Export settings** downloads that same file. Use **Import configuration** to reload it. Presets are not used in the UI. Saved configurations are intentionally ignored by Git because they commonly contain local paths.
 - A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder. Missing `src`, `ref`, and `logs` folders are created automatically on run or with **Create workspace folders**; `dst` stage folders are created only when output is produced. Existing workspace contents are preserved; a separate **Clear generated output** action removes only generated `dst` contents.
-- Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a profile is saved or a run starts.
+- Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a configuration is saved or a run starts.
 - Consecutive selected stages are executed as one pipeline segment through `automatic_pipeline.py`, so generated output flows into the next selected stage correctly.
 - **Stop pipeline** cancels the active UI run and terminates its pipeline process tree without closing the web interface.
 - A live status message and progress bar show the active stage and completed selected stages. Progress output is deduplicated in the web log and mirrored in the launching terminal.
@@ -30,7 +30,7 @@ The web UI is tested with Gradio `6.14.0`.
 
 ### Workspace Root
 
-Enter one directory in **Workspace root**, for example `C:\datasets\anime\frieren_project`, and choose **Create workspace folders**. While this root is set, it takes precedence over manually entered General path fields for saved profiles and pipeline runs:
+Enter one directory in **Workspace root**, for example `C:\datasets\anime\frieren_project`, and choose **Create workspace folders**. While this root is set, it takes precedence over manually entered General path fields for saved configurations and pipeline runs:
 
 ```text
 C:\datasets\anime\frieren_project\
@@ -78,6 +78,7 @@ Nested folder names become character labels. Images directly inside `references`
 
 Stage 3 also provides dataset-balance and storage controls:
 
+- `--classification_chunk_size` limits the number of CCIP features included in one quadratic similarity/OPTICS operation. It defaults to `4096`, avoiding infeasible full-matrix allocations for very large runs such as 166,570 crops. Smaller values reduce RAM/VRAM further; for chunked runs, unnamed clusters are not merged across chunk boundaries.
 - `--max_images_per_character` limits the total saved matched images for each recognized reference character.
 - `--max_images_per_character_per_episode` limits repeated images for one character within an inferred episode. Episodes are detected from `S01E01`-style file or folder names; otherwise the immediate source folder is used.
 - `--remove_classified_aux_files` removes generated `.json` metadata and `.npy` CCIP feature cache files from the classified output only after dependent selected stages have consumed them. Leave it disabled when resuming later from classified intermediate output.
@@ -139,7 +140,7 @@ The Pinokio start script checks the Gradio dependency before launching, captures
 
 ### Programmatic UI Access
 
-Choose a **Starting preset**, load and edit it as needed, then save the single resulting profile, for example `configs/ui/saved/my_pipeline.toml`. The named Gradio endpoint `run_saved_profile` accepts that project-relative profile path and an optional comma-separated stage list.
+Configure the workflow and select **Save configuration** to write its single TOML file, for example `configs/ui/saved/my_pipeline.toml`. The file contains both enabled stages and all stage settings and is available through **Export settings**. The named Gradio endpoint `run_saved_profile` accepts that project-relative configuration path and an optional comma-separated stage override.
 
 Python:
 

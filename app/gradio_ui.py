@@ -36,11 +36,6 @@ PIPELINE_STOP_REQUESTED = threading.Event()
 ACTIVE_PIPELINE_PROCESS: subprocess.Popen[str] | None = None
 WORKSPACE_DIRECTORIES = ("src", "ref", "logs")
 WORKSPACE_RESERVED_DIRECTORIES = (*WORKSPACE_DIRECTORIES, "dst")
-BUILTIN_PRESETS = (
-    "configs/pipelines/screenshots.toml",
-    "configs/pipelines/booru.toml",
-    "configs/pipelines/base.toml",
-)
 ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 STAGE_START_RE = re.compile(r"Start stage\s+(\d+)")
 TQDM_PROGRESS_RE = re.compile(
@@ -135,6 +130,7 @@ FIELD_GROUPS = OrderedDict(
                 "accept_multiple_candidates",
                 "cluster_merge_threshold",
                 "cluster_min_samples",
+                "classification_chunk_size",
                 "same_threshold_rel",
                 "same_threshold_abs",
             ],
@@ -267,6 +263,10 @@ FIELD_GUIDANCE = {
     "keep_unnamed_clusters": "Keeps unmatched material for coverage, but it does not gain reference labels.",
     "cluster_merge_threshold": "Controls cluster joining; permissive matching risks merging different characters.",
     "cluster_min_samples": "Higher values suppress small clusters but can lose rare-character samples.",
+    "classification_chunk_size": (
+        "Bounds quadratic Stage 3 similarity memory. Lower values use less RAM/VRAM "
+        "but do not merge unnamed clusters across chunks."
+    ),
     "same_threshold_rel": "Changes noise extraction and filtering strictness, affecting character-match precision.",
     "same_threshold_abs": "Changes noise extraction and filtering strictness for larger clusters.",
     "no_cropped_in_dataset": "Excluding crops reduces close-up examples and dataset size.",
@@ -440,6 +440,20 @@ STYLE = """
 }
 .config-accordion {
   margin-top: 1rem;
+}
+.compact-upload {
+  min-height: 6.2rem !important;
+  max-height: 7.8rem !important;
+}
+.compact-upload .upload-container,
+.compact-upload [data-testid="dropzone"] {
+  min-height: 5rem !important;
+  padding: .35rem !important;
+}
+.compact-upload .upload-container svg,
+.compact-upload [data-testid="dropzone"] svg {
+  width: 1.2rem !important;
+  height: 1.2rem !important;
 }
 .run-log textarea {
   font-family: "Cascadia Mono", "Consolas", monospace;
@@ -653,17 +667,6 @@ def clear_workspace_output(root_value: str) -> str:
     )
 
 
-def available_profiles() -> list[str]:
-    profiles = list(BUILTIN_PRESETS)
-    if SAVED_CONFIG_DIR.exists():
-        profiles.extend(
-            str(path.relative_to(ROOT)).replace("\\", "/")
-            for path in sorted(SAVED_CONFIG_DIR.glob("*.toml"))
-            if path.name != RUNTIME_CONFIG.name
-        )
-    return profiles
-
-
 def clean_run_line(line: str) -> str:
     clean_fragments = (
         ANSI_ESCAPE_RE.sub("", line).replace("\r\n", "\n").replace("\r", "\n").splitlines()
@@ -780,7 +783,6 @@ def profile_path(name: str) -> Path:
 
 def save_configuration(
     name: str,
-    source_preset: str,
     workspace_root: str,
     selected: list[str],
     *values: Any,
@@ -790,7 +792,6 @@ def save_configuration(
     config["ui"] = {
         "enabled_stages": stage_values(selected),
         "fixed_port": PORT,
-        "source_preset": source_preset,
         "workspace_root": normalize_path_value(workspace_root),
     }
     path = profile_path(name)
@@ -798,27 +799,25 @@ def save_configuration(
         toml.dump(config, handle)
     relative_path = str(path.relative_to(ROOT)).replace("\\", "/")
     return (
-        f"Profile saved and added to available configurations: `{relative_path}`",
-        gr.update(choices=available_profiles(), value=relative_path),
+        f"Configuration saved. Export is ready: `{relative_path}`",
+        str(path),
     )
 
 
-def load_configuration(preset: str, uploaded_path: str | None):
-    config = defaults(include_screenshots=False)
+def load_configuration(uploaded_path: str | None):
+    config = defaults()
     ui_config: dict[str, Any] = {}
-    path = Path(uploaded_path) if uploaded_path else ROOT / preset
-    if path.exists():
+    path = Path(uploaded_path) if uploaded_path else None
+    if path and path.exists():
         loaded = flatten_toml(toml.load(path))
         ui_config = loaded.pop("ui", {}) if isinstance(loaded.get("ui"), dict) else {}
         config.update({key: clean_value(value) for key, value in loaded.items()})
         status = f"Configuration loaded: {path.name}"
     else:
-        status = f"Configuration not found: {path}"
-    source_preset = ui_config.get("source_preset", preset)
+        status = "Choose a TOML configuration file to import."
     selected = [str(stage) for stage in ui_config.get("enabled_stages", DEFAULT_ENABLED_STAGES)]
     workspace_root = ui_config.get("workspace_root", "")
     updates = [
-        gr.update(value=source_preset),
         gr.update(value=workspace_root),
         gr.update(value=selected),
     ]
@@ -1137,23 +1136,21 @@ def build_interface() -> gr.Blocks:
                             "data is written; clearing output removes only `dst` results."
                         )
                 with gr.Column():
-                    preset = gr.Dropdown(
-                        choices=available_profiles(),
-                        value="configs/pipelines/screenshots.toml",
-                        label="Starting preset",
-                        info=(
-                            "Load a bundled starting point. Its values and your edits are saved "
-                            "together in one TOML profile."
-                        ),
+                    uploaded = gr.File(
+                        label="Import configuration",
+                        file_types=[".toml"],
+                        type="filepath",
+                        elem_classes="compact-upload",
                     )
-                    uploaded = gr.File(label="Import existing profile", file_types=[".toml"], type="filepath")
-                    load_button = gr.Button("Load profile")
+                    load_button = gr.Button("Load configuration")
                     profile_name = gr.Textbox(
-                        label="Profile name",
+                        label="Configuration name",
                         value="my_pipeline",
-                        info="One TOML file stores the preset-derived values, stage selection, paths, and edits.",
+                        info="One TOML file stores stage selection, workspace paths, and all settings.",
                     )
-                    save_button = gr.Button("Save profile", variant="primary")
+                    with gr.Row():
+                        save_button = gr.Button("Save configuration", variant="primary")
+                        export_button = gr.DownloadButton("Export settings")
             status = gr.Markdown(f"Web interface: `http://127.0.0.1:{PORT}` (fixed port).")
             shutdown_button = gr.Button("Shut down server", variant="stop", elem_classes="shutdown-button")
 
@@ -1209,14 +1206,14 @@ def build_interface() -> gr.Blocks:
 
         save_button.click(
             save_configuration,
-            inputs=[profile_name, preset, workspace_root, stage_selector, *controls_in_action_order],
-            outputs=[status, preset],
+            inputs=[profile_name, workspace_root, stage_selector, *controls_in_action_order],
+            outputs=[status, export_button],
             api_name="save_configuration",
         )
         load_button.click(
             load_configuration,
-            inputs=[preset, uploaded],
-            outputs=[preset, workspace_root, stage_selector, *controls_in_action_order, status],
+            inputs=uploaded,
+            outputs=[workspace_root, stage_selector, *controls_in_action_order, status],
         ).then(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
         stage_selector.change(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
         run_event = run_button.click(

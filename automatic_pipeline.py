@@ -297,6 +297,7 @@ def classify_characters(args, stage, logger):
         n_add_images_to_ref=args.n_add_to_ref_per_character,
         max_images_per_character=args.max_images_per_character,
         max_images_per_character_per_episode=args.max_images_per_character_per_episode,
+        classification_chunk_size=args.classification_chunk_size,
         move=move,
         logger=logger,
     )

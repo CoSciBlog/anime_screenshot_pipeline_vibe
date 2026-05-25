@@ -80,7 +80,7 @@ def get_and_create_dst_dir(
     args: argparse.Namespace,
     mode: str,
     sub_dir: str = "",
-    makedirs: bool = True,
+    makedirs: bool = False,
 ) -> str:
     """
     Constructs the destination directory path based on the mode, subdirectory,
@@ -97,7 +97,8 @@ def get_and_create_dst_dir(
             An additional subdirectory to put at the end.
             Defaults to an empty string.
         makedirs (bool, optional):
-            Whether to create the directory if it doesn't exist. Defaults to True.
+            Whether to create the directory before a writer produces files.
+            Defaults to False to avoid empty pipeline output folders.
 
     Returns:
         str: The path to the constructed destination directory.

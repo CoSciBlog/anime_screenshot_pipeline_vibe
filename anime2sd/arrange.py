@@ -9,6 +9,7 @@ from anime2sd.basics import (
     get_images_recursively,
     get_files_recursively,
     get_corr_meta_names,
+    METADATA_DIRNAME,
     sanitize_path,
 )
 from anime2sd.character import Character
@@ -28,7 +29,9 @@ def construct_aux_files_dict(paths):
     for path in tqdm(paths):
         dirname, filename = os.path.split(path)
         if filename.startswith("."):
-            file_base = re.sub(r"\_meta.json$", "", filename).lstrip(".")
+            file_base = re.sub(r"\_(?:meta\.json|ccip\.npy)$", "", filename).lstrip(".")
+            if os.path.basename(dirname) == METADATA_DIRNAME:
+                dirname = os.path.dirname(dirname)
         else:
             file_base = os.path.splitext(filename)[0]
         file_base = os.path.join(dirname, file_base)
@@ -52,8 +55,12 @@ def move_img_with_aux(img_path, dst_dir, aux_dict):
 
     img_base, _ = os.path.splitext(img_path)
     for path in aux_dict[img_base]:
-        if os.path.dirname(path) != dst_dir:
-            shutil.move(path, dst_dir)
+        destination = dst_dir
+        if os.path.basename(os.path.dirname(path)) == METADATA_DIRNAME:
+            destination = os.path.join(dst_dir, METADATA_DIRNAME)
+            os.makedirs(destination, exist_ok=True)
+        if os.path.dirname(path) != destination:
+            shutil.move(path, destination)
 
 
 def get_folder_name(folder_type, info_dict, max_character_number) -> str:

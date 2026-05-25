@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased - 2026-05-24
+## Unreleased - 2026-05-25
 
 - Added the local Gradio Frame Lab interface on fixed port `7866`.
 - Added independently selectable pipeline stages, per-stage settings with help text, TOML profile save/load, and a named profile execution API.
@@ -16,6 +16,8 @@
 - Made **Configuration** collapsible, removed the redundant saved-profile download field, added saved profiles directly to preset selection, and automatically creates missing workspace folders at run time without altering existing content.
 - Added live stage progress/completion status, condensed ANSI-free run-log progress display, and elapsed-time heartbeat reporting while OPTICS clustering is active.
 - Added Stage 3 output controls for per-character and per-episode matched-image limits and optional cleanup of classified JSON/NPY auxiliary files after downstream use.
+- Deferred creation of `dst` stage directories until output is produced, and changed output cleanup to leave no empty generated directory tree behind.
+- Stored per-image JSON/NPY sidecars inside local `metadata` child directories throughout generated data, with preprocessing migration for older adjacent sidecars.
 - Added `Stop pipeline` and `Shut down server` controls with named Gradio API endpoints.
 - Updated the Python dependency set for Python 3.10, including Gradio `6.14.0`, Transformers `5.9.0`, and current compatible image-processing dependencies while preserving CUDA PyTorch installation.
 - Added focused UI/process-control and terminal-logging unit tests, reproducible `requirements-dev.txt`, and stable pytest collection for optional-data integration tests.

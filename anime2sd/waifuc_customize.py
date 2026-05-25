@@ -1,5 +1,6 @@
 import os
 import re
+import json
 from typing import List, Dict, Tuple, Optional, Iterator, Union
 from PIL import UnidentifiedImageError
 from tqdm import tqdm
@@ -11,7 +12,7 @@ from waifuc.model import ImageItem
 from waifuc.source import WebDataSource, DanbooruSource
 from imgutils.detect import detect_faces, detect_heads
 
-from anime2sd.basics import parse_grabber_info
+from anime2sd.basics import get_corr_meta_names, get_or_generate_metadata, parse_grabber_info
 
 
 class WebDataSourceWithLimit(WebDataSource):
@@ -226,7 +227,9 @@ class LocalSource(BaseDataSource):
             except UnidentifiedImageError:
                 continue
 
-            meta = origin_item.meta
+            meta = get_or_generate_metadata(
+                file, warn=False, overwrite_path=self.overwrite_path
+            )
             meta["current_path"] = os.path.abspath(file)
             if "path" not in meta or self.overwrite_path:
                 meta["path"] = meta["current_path"]
@@ -345,9 +348,14 @@ class SaveExporter(LocalDirectoryExporter):
 
         item.save(
             save_file_path,
-            no_meta=self.no_meta,
+            no_meta=True,
             skip_when_image_exist=self.skip_when_image_exist,
         )
+        if not self.no_meta:
+            meta_path, _ = get_corr_meta_names(save_file_path)
+            os.makedirs(os.path.dirname(meta_path), exist_ok=True)
+            with open(meta_path, "w", encoding="utf-8") as meta_file:
+                json.dump(item.meta, meta_file, indent=4)
 
     def reset(self):
         self.untitles = 0

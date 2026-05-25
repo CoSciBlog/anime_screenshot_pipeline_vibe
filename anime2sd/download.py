@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import List, Dict, Optional, Union
 
 from pynyaasi.nyaasi import NyaaSiClient
@@ -88,6 +89,7 @@ def download_animes(
                 ):
                     continue
                 anime_found = True
+                os.makedirs(output_dir, exist_ok=True)
                 torrent_file = TorrentDownloader(item.magnet_url, output_dir)
                 logger.info(f"Downloading {item.title} ...")
                 torrent_file.start_download()

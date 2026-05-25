@@ -1,11 +1,13 @@
 import logging
 
 import numpy as np
+from PIL import Image
 
 from anime2sd.character import Character
 from anime2sd.classif.file_utils import (
     get_episode_key,
     limit_recognized_character_images,
+    save_to_dir,
 )
 from automatic_pipeline import cleanup_classified_aux_files
 
@@ -51,11 +53,35 @@ def test_cleanup_classified_aux_files_keeps_images(tmp_path):
     output = tmp_path / "classified" / "frieren"
     output.mkdir(parents=True)
     (output / "keep.png").write_text("image", encoding="utf-8")
-    (output / "remove_meta.json").write_text("{}", encoding="utf-8")
-    (output / "remove_ccip.npy").write_bytes(b"feature")
+    metadata = output / "metadata"
+    metadata.mkdir()
+    (metadata / "remove_meta.json").write_text("{}", encoding="utf-8")
+    (metadata / "remove_ccip.npy").write_bytes(b"feature")
 
     cleanup_classified_aux_files(str(tmp_path / "classified"), logging.getLogger())
 
     assert (output / "keep.png").exists()
-    assert not (output / "remove_meta.json").exists()
-    assert not (output / "remove_ccip.npy").exists()
+    assert not (metadata / "remove_meta.json").exists()
+    assert not (metadata / "remove_ccip.npy").exists()
+
+
+def test_classified_output_stores_json_and_npy_in_metadata_subfolder(tmp_path):
+    source = tmp_path / "cropped" / "frame.png"
+    source.parent.mkdir()
+    Image.new("RGB", (16, 16), color="white").save(source)
+    output = tmp_path / "classified"
+
+    save_to_dir(
+        np.array([str(source)]),
+        np.array([[0.25, 0.5]]),
+        str(output),
+        np.array([0]),
+        {0: Character.from_string("frieren")},
+    )
+
+    character_dir = output / "frieren"
+    assert (character_dir / "frame.png").exists()
+    assert (character_dir / "metadata" / ".frame_meta.json").exists()
+    assert (character_dir / "metadata" / ".frame_ccip.npy").exists()
+    assert not (character_dir / ".frame_meta.json").exists()
+    assert not (character_dir / ".frame_ccip.npy").exists()

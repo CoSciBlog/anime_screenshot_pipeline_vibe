@@ -15,6 +15,7 @@ from .basics import (
     get_corr_meta_names,
     get_or_generate_metadata,
     remove_empty_folders,
+    METADATA_DIRNAME,
 )
 from .emb_utils import update_emb_init_info
 from .character import Character
@@ -99,6 +100,7 @@ def initialize_character_for_original(
 
     if updated:
         # Save the updated original metadata
+        os.makedirs(os.path.dirname(original_meta_path), exist_ok=True)
         with open(original_meta_path, "w") as orig_meta_file:
             json.dump(orig_meta_data, orig_meta_file, indent=4)
 
@@ -171,6 +173,7 @@ def update_character_for_original(
 
     if updated:
         # Save the updated original metadata
+        os.makedirs(os.path.dirname(original_meta_path), exist_ok=True)
         with open(original_meta_path, "w") as orig_meta_file:
             json.dump(orig_meta_data, orig_meta_file, indent=4)
 
@@ -227,6 +230,7 @@ def save_characters_to_meta_single(
             meta_data["characters"] = [character_string]
 
         # Save the updated metadata for the cropped image
+        os.makedirs(os.path.dirname(meta_file_path), exist_ok=True)
         with open(meta_file_path, "w") as meta_file:
             json.dump(meta_data, meta_file, indent=4)
 
@@ -292,7 +296,13 @@ def save_characters_to_meta(
     character_names = set()
 
     # Iterate over each folder in the classified directory to get character names
-    for folder_name in get_folders_recursively(classified_dir):
+    image_folders = [
+        folder_name
+        for folder_name in get_folders_recursively(classified_dir)
+        if os.path.basename(folder_name) != METADATA_DIRNAME
+        and get_images_recursively(folder_name)
+    ]
+    for folder_name in image_folders:
         folder_name = os.path.relpath(folder_name, classified_dir)
         char_name = parse_char_name(folder_name)
         character = Character.from_string(char_name, outer_sep=os.path.sep)
@@ -316,7 +326,7 @@ def save_characters_to_meta(
     logger.info("Saving characters to metadata ...")
 
     # Iterate over each folder in the classified directory to update metadata
-    for folder_name in tqdm(get_folders_recursively(classified_dir)):
+    for folder_name in tqdm(image_folders):
         folder_name = os.path.relpath(folder_name, classified_dir)
         char_name = parse_char_name(folder_name)
         character = Character.from_string(char_name, outer_sep=os.path.sep)
@@ -407,13 +417,14 @@ def save_image_and_meta(
         with open(meta_path, "r") as meta_file:
             meta_data = json.load(meta_file)
         _, ext_orig = os.path.splitext(meta_data["filename"])
-        new_meta_path = os.path.join(save_dir, meta_filename)
+        new_meta_path, _ = get_corr_meta_names(adjusted_path)
         meta_data["current_path"] = new_meta_path
         meta_data["type"] = image_type
         meta_data["filename"] = meta_data["filename"].replace(ext_orig, ext)
         meta_data["image_size"] = img.size
 
         # Save the updated metadata with new extension
+        os.makedirs(os.path.dirname(new_meta_path), exist_ok=True)
         with open(new_meta_path, "w") as meta_file:
             json.dump(meta_data, meta_file, indent=4)
     # Normally this never gets triggered
@@ -433,17 +444,19 @@ def copy_image_and_meta(img_path: str, save_dir: str, image_type: str) -> None:
     Raises:
         ValueError: If metadata file does not exist.
     """
-    shutil.copy(img_path, os.path.join(save_dir, os.path.basename(img_path)))
+    saved_img_path = os.path.join(save_dir, os.path.basename(img_path))
+    shutil.copy(img_path, saved_img_path)
     # Copy the corresponding metadata file
     meta_path, meta_filename = get_corr_meta_names(img_path)
     if os.path.exists(meta_path):
         with open(meta_path, "r") as meta_file:
             meta_data = json.load(meta_file)
-        new_meta_path = os.path.join(save_dir, meta_filename)
+        new_meta_path, _ = get_corr_meta_names(saved_img_path)
         meta_data["current_path"] = new_meta_path
         meta_data["type"] = image_type
 
         # Save the updated metadata with new extension
+        os.makedirs(os.path.dirname(new_meta_path), exist_ok=True)
         with open(new_meta_path, "w") as meta_file:
             json.dump(meta_data, meta_file, indent=4)
     # Normally this never gets triggered
@@ -499,8 +512,6 @@ def resize_character_images(
             warn = True
         logger.info(f"Processing images from {src_dir} ...")
         save_dir = os.path.join(dst_dir, os.path.basename(src_dir))
-        os.makedirs(save_dir, exist_ok=True)
-
         for img_path in tqdm(get_images_recursively(src_dir)):
             img_path = os.path.abspath(img_path)
             if img_path in processed_img_paths:
@@ -539,8 +550,6 @@ def resize_character_images(
     # Process no character images
     # Randomly select n_nocharacter_frames and save
     save_dir = os.path.join(dst_dir, "no_characters")
-    os.makedirs(save_dir, exist_ok=True)
-
     if n_nocharacter_frames < len(nocharacter_frames):
         selected_frames = random.sample(nocharacter_frames, n_nocharacter_frames)
     else:

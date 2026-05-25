@@ -10,6 +10,9 @@ from typing import List
 from pathlib import Path
 
 
+METADATA_DIRNAME = "metadata"
+
+
 def parse_anime_info(filename: str) -> tuple:
     """
     Parses a filename to extract the anime name and episode number.
@@ -221,7 +224,7 @@ def get_corr_meta_names(img_path):
     filename = os.path.basename(img_path)
     base_filename = os.path.splitext(filename)[0]
     meta_filename = f".{base_filename}_meta.json"
-    meta_path = os.path.join(os.path.dirname(img_path), meta_filename)
+    meta_path = os.path.join(os.path.dirname(img_path), METADATA_DIRNAME, meta_filename)
     return meta_path, meta_filename
 
 
@@ -297,6 +300,7 @@ def get_or_generate_metadata(img_path, warn=False, overwrite_path=False):
         meta_data = get_default_metadata(img_path, warn)
         updated = True
     if updated:
+        os.makedirs(os.path.dirname(meta_path), exist_ok=True)
         with open(meta_path, "w") as meta_file:
             json.dump(meta_data, meta_file, indent=4)
     return meta_data
@@ -306,7 +310,7 @@ def get_corr_ccip_names(img_path):
     filename = os.path.basename(img_path)
     base_filename = os.path.splitext(filename)[0]
     ccip_filename = f".{base_filename}_ccip.npy"
-    ccip_path = os.path.join(os.path.dirname(img_path), ccip_filename)
+    ccip_path = os.path.join(os.path.dirname(img_path), METADATA_DIRNAME, ccip_filename)
     return ccip_path, ccip_filename
 
 

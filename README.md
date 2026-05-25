@@ -18,7 +18,7 @@ The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local 
 - Each control displays the original argument description as inline help text, with concise quality, matching, or performance guidance where the setting affects results.
 - Stages are selected independently. Stages 1 (frame extraction) and 2 (cropping) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
 - UI profiles can be imported from TOML. A single **Save profile** action stores the loaded starting preset values, stage selection, workspace root, and any field edits together in one executable profile beneath `configs/ui/saved/`, then adds that profile to the **Starting preset** list. These files are intentionally ignored by Git because they commonly contain local paths.
-- A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder. Missing workspace folders are created automatically on run or with **Create workspace folders**. Existing workspace contents are preserved; a separate **Clear generated output** action removes only generated `dst` contents.
+- A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder. Missing `src`, `ref`, and `logs` folders are created automatically on run or with **Create workspace folders**; `dst` stage folders are created only when output is produced. Existing workspace contents are preserved; a separate **Clear generated output** action removes only generated `dst` contents.
 - Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a profile is saved or a run starts.
 - Consecutive selected stages are executed as one pipeline segment through `automatic_pipeline.py`, so generated output flows into the next selected stage correctly.
 - **Stop pipeline** cancels the active UI run and terminates its pipeline process tree without closing the web interface.
@@ -37,14 +37,26 @@ C:\datasets\anime\frieren_project\
 |-- src\                 # Input for the first enabled stage
 |-- ref\                 # Character reference images for Stage 3
 |-- logs\                # Pipeline log files
-`-- dst\
+`-- dst\                 # Created only after a stage emits output
     |-- intermediate\    # Generated raw, cropped, and classified working data
     `-- training\        # Final selected and captioned training data
 ```
 
 The content expected in `src` depends on the first enabled stage: videos for Stage 1, raw images for Stage 2, or already cropped images when starting directly at Stage 3. Keep processing stages that depend on each other's output enabled consecutively, for example Stages 2 and 3 together.
 
-Running **Create workspace folders** is non-destructive: existing `src`, `ref`, `logs`, and `dst` content is retained. Use **Clear generated output** only when you intentionally want to remove the contents below `dst`; it recreates empty `dst/intermediate` and `dst/training` folders and does not touch source or reference images.
+Running **Create workspace folders** is non-destructive: existing `src`, `ref`, `logs`, and `dst` content is retained. It does not create empty `dst`, `dst/intermediate`, or `dst/training` directories. Use **Clear generated output** only when you intentionally want to remove the contents below `dst`; it removes the output tree and does not touch source or reference images.
+
+Generated per-image sidecars are kept out of image views. Each folder containing output images stores its corresponding JSON metadata and CCIP cache arrays under a local `metadata` child directory:
+
+```text
+dst\intermediate\screenshots\classified\frieren\
+|-- frame_001.png
+`-- metadata\
+    |-- .frame_001_meta.json
+    `-- .frame_001_ccip.npy
+```
+
+When preprocessing encounters legacy `.json` or `.npy` sidecars beside an input image, it relocates those existing files to the matching `metadata` child directory without deleting image data.
 
 ### Character Reference Images
 

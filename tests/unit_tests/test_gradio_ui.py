@@ -70,6 +70,7 @@ def test_workspace_structure_maps_and_creates_all_pipeline_directories(tmp_path)
     assert "Workspace created" in status
     for relative_path in ui.WORKSPACE_DIRECTORIES:
         assert (tmp_path / relative_path).is_dir()
+    assert not (tmp_path / "dst").exists()
 
 
 def test_workspace_structure_preserves_existing_contents(tmp_path):
@@ -81,6 +82,15 @@ def test_workspace_structure_preserves_existing_contents(tmp_path):
 
     assert existing_file.read_text(encoding="utf-8") == "keep"
     assert "Existing folders and their contents were kept" in status
+
+
+def test_workspace_structure_rejects_dst_file_without_creating_output_tree(tmp_path):
+    (tmp_path / "dst").write_text("not a directory", encoding="utf-8")
+
+    *_updates, status = ui.create_workspace_structure(str(tmp_path))
+
+    assert "exists but is not a folder" in status
+    assert not (tmp_path / "src").exists()
 
 
 def test_clear_workspace_output_deletes_only_generated_dst_content(tmp_path):
@@ -96,8 +106,7 @@ def test_clear_workspace_output_deletes_only_generated_dst_content(tmp_path):
     assert source.exists()
     assert reference.exists()
     assert not result.exists()
-    assert (tmp_path / "dst" / "intermediate").is_dir()
-    assert (tmp_path / "dst" / "training").is_dir()
+    assert not (tmp_path / "dst").exists()
     assert "Generated output cleared" in status
 
 
@@ -193,8 +202,8 @@ def test_running_from_form_creates_missing_workspace_folders(tmp_path, monkeypat
 
     assert result == [("status", "progress", "log")]
     assert captured == [2, 3]
-    assert (tmp_path / "dst" / "intermediate").is_dir()
     assert (tmp_path / "logs").is_dir()
+    assert not (tmp_path / "dst").exists()
 
 
 def test_stop_pipeline_terminates_active_child_process():

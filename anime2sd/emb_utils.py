@@ -91,5 +91,6 @@ def update_emb_init_info(
         )
 
     # Write the updated content back to the JSON file
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, "w") as file:
         json.dump(name_init_map, file, indent=4)

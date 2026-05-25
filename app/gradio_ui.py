@@ -34,7 +34,8 @@ PIPELINE_PROCESS_LOCK = threading.Lock()
 PIPELINE_RUN_LOCK = threading.Lock()
 PIPELINE_STOP_REQUESTED = threading.Event()
 ACTIVE_PIPELINE_PROCESS: subprocess.Popen[str] | None = None
-WORKSPACE_DIRECTORIES = ("src", "dst", "dst/intermediate", "dst/training", "ref", "logs")
+WORKSPACE_DIRECTORIES = ("src", "ref", "logs")
+WORKSPACE_RESERVED_DIRECTORIES = (*WORKSPACE_DIRECTORIES, "dst")
 BUILTIN_PRESETS = (
     "configs/pipelines/screenshots.toml",
     "configs/pipelines/booru.toml",
@@ -580,10 +581,10 @@ def create_workspace_structure(root_value: str):
         )
     root = Path(normalize_path_value(root_value))
     existing_directories = [
-        relative_path for relative_path in WORKSPACE_DIRECTORIES
+        relative_path for relative_path in WORKSPACE_RESERVED_DIRECTORIES
         if (root / relative_path).is_dir()
     ]
-    for relative_path in WORKSPACE_DIRECTORIES:
+    for relative_path in WORKSPACE_RESERVED_DIRECTORIES:
         path = root / relative_path
         if path.exists() and not path.is_dir():
             return (
@@ -593,11 +594,14 @@ def create_workspace_structure(root_value: str):
                 gr.update(),
                 f"Cannot create workspace: `{path}` exists but is not a folder.",
             )
+    for relative_path in WORKSPACE_DIRECTORIES:
+        path = root / relative_path
         path.mkdir(parents=True, exist_ok=True)
     if existing_directories:
         status = (
             f"Workspace ready: `{root}`. Existing folders and their contents were kept; "
-            "new missing folders were created."
+            "missing input, reference, and log folders were created. Output folders "
+            "are created only when a stage writes data."
         )
     else:
         status = (
@@ -635,11 +639,18 @@ def clear_workspace_output(root_value: str) -> str:
             else:
                 item.unlink()
             removed += 1
-    for relative_path in ("dst/intermediate", "dst/training"):
-        (root / relative_path).mkdir(parents=True, exist_ok=True)
     if removed:
-        return f"Generated output cleared: `{dst}`. Empty output folders were recreated."
-    return f"No generated output to clear in `{dst}`. Empty output folders are ready."
+        shutil.rmtree(dst)
+        return (
+            f"Generated output cleared: `{dst}`. Output folders will be created "
+            "when a stage writes data."
+        )
+    if dst.exists():
+        dst.rmdir()
+    return (
+        f"No generated output to clear in `{dst}`. Output folders will be created "
+        "when a stage writes data."
+    )
 
 
 def available_profiles() -> list[str]:
@@ -1122,7 +1133,8 @@ def build_interface() -> gr.Blocks:
                         gr.Markdown(
                             "`src` = first-stage input, `ref` = character reference images, "
                             "`dst/intermediate` and `dst/training` = generated pipeline data. "
-                            "Creating a workspace keeps existing contents; clearing output removes only `dst` results."
+                            "Creating a workspace keeps existing contents and leaves `dst` uncreated until "
+                            "data is written; clearing output removes only `dst` results."
                         )
                 with gr.Column():
                     preset = gr.Dropdown(

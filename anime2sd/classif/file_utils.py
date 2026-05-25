@@ -16,6 +16,7 @@ from ..basics import (
     get_corr_meta_names,
     get_corr_ccip_names,
     get_default_metadata,
+    METADATA_DIRNAME,
     random_string,
 )
 from ..character import Character
@@ -139,6 +140,7 @@ def load_image_features_and_characters(
             img_embedding = ccip_extract_feature(img_path)
             images.append(img_embedding)
             if save_ccip_cache:
+                os.makedirs(os.path.dirname(ccip_path), exist_ok=True)
                 np.save(ccip_path, img_embedding)
 
         meta_path, _ = get_corr_meta_names(img_path)
@@ -206,6 +208,7 @@ def parse_ref_dir(
     image_extensions = [".png", ".jpg", ".jpeg", ".webp", ".gif"]
 
     for root, dirs, files in os.walk(ref_dir):
+        dirs[:] = [directory for directory in dirs if directory != METADATA_DIRNAME]
         if root != ref_dir:
             relative_path = os.path.relpath(root, ref_dir)
             character = Character.from_string(relative_path, outer_sep=os.path.sep)
@@ -278,10 +281,13 @@ def save_to_dir(
     if logger is None:
         logger = logging.getLogger()
 
+    logger.info(f"Saving classified images to {dst_dir} ...")
+    if len(labels) == 0:
+        logger.info("No classified images to save.")
+        return
+
     unique_labels = sorted(set(labels))
     os.makedirs(dst_dir, exist_ok=True)
-
-    logger.info(f"Saving classified images to {dst_dir} ...")
     for label in unique_labels:
         if character_mapping and label in character_mapping:
             character = character_mapping[label]
@@ -303,7 +309,8 @@ def save_to_dir(
             )
             # Handle metadata files
             meta_path, meta_filename = get_corr_meta_names(img_path)
-            meta_path_dst = os.path.join(dst_dir, folder_name, meta_filename)
+            meta_path_dst, _ = get_corr_meta_names(img_path_dst)
+            os.makedirs(os.path.dirname(meta_path_dst), exist_ok=True)
 
             if os.path.exists(meta_path):
                 if move:
@@ -317,7 +324,8 @@ def save_to_dir(
 
             # Handle ccip embeddings
             ccip_path, ccip_filename = get_corr_ccip_names(img_path)
-            ccip_path_dst = os.path.join(dst_dir, folder_name, ccip_filename)
+            ccip_path_dst, _ = get_corr_ccip_names(img_path_dst)
+            os.makedirs(os.path.dirname(ccip_path_dst), exist_ok=True)
             if os.path.exists(ccip_path):
                 if move:
                     shutil.move(ccip_path, ccip_path_dst)

@@ -130,6 +130,6 @@ def extract_and_remove_similar(
             duplicate_remover.remove_similar_from_dir(dst_ep_dir)
 
     # Go through all files again to remove duplicates from op and ed
-    if duplicate_remover is not None:
+    if duplicate_remover is not None and os.path.isdir(dst_dir):
         duplicate_remover.remove_similar_from_dir(dst_dir, portion="first")
         duplicate_remover.remove_similar_from_dir(dst_dir, portion="last")

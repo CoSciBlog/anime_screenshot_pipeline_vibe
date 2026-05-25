@@ -57,11 +57,13 @@ def rearrange_related_files(src_dir: str, logger: Optional[logging.Logger] = Non
                 if found_path is None:
                     if related_path.endswith("json"):
                         meta_data = get_default_metadata(img_path)
+                        os.makedirs(os.path.dirname(related_path), exist_ok=True)
                         with open(related_path, "w") as f:
                             json.dump(meta_data, f)
                         default_metadata_count += 1
                 else:
                     # Move the found file to the expected location
+                    os.makedirs(os.path.dirname(related_path), exist_ok=True)
                     shutil.move(found_path, related_path)
                     logger.info(
                         f"Moved related file from {found_path} " f"to {related_path}"

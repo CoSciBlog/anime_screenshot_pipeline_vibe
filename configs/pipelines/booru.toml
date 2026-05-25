@@ -50,7 +50,7 @@ allowed_image_classes = ["illustration", "bangumi"]
 # Maximum size for the smaller dimension of too large downloaded images to resize to
 max_download_size = 1024
 
-# Character Cropping Configuration
+# Stage 2 - Character Detection and Crop Generation Configuration
 [character_cropping]
 # Use 3 stage crop to get halfbody and head crops
 use_3stage_crop = 2

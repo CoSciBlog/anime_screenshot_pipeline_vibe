@@ -93,7 +93,7 @@ def setup_args(args):
     STAGE_ALIASES = {
         0: ["download"],
         1: ["extract", "remove_similar", "remove_duplicates"],
-        2: ["crop"],
+        2: ["detect", "crop"],
         3: ["classify"],
         4: ["select"],
         5: ["tag", "caption", "tag_and_caption"],
@@ -222,7 +222,7 @@ def crop_characters(args, stage, logger):
     src_dir = get_src_dir(args, stage)
     # Get the path to the destination directory for the cropped images
     dst_dir = get_and_create_dst_dir(args, "intermediate", "cropped")
-    logger.info(f"Cropping individual characters to {dst_dir} ...")
+    logger.info(f"Detecting and cropping individual characters to {dst_dir} ...")
 
     source = LocalSource(src_dir)
     detect_config_person = {"level": args.detect_level}

@@ -48,7 +48,7 @@ detect_duplicate_batch_size = 16
 # Cosine similarity threshold for image duplicate detection
 similar_thresh = 0.95
 
-# Character Cropping Configuration
+# Stage 2 - Character Detection and Crop Generation Configuration
 [character_cropping]
 # Minimum size for character cropping
 min_crop_size = 320

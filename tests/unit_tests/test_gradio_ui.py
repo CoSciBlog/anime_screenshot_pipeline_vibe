@@ -24,6 +24,8 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
     assert "Export settings" in components
     assert "Starting preset" not in components
     assert "Import configuration" in components
+    assert "2 - Detect" in components
+    assert "2 - Crop" not in components
     assert "Stage guide" in components
     assert "Configuration" in components
     assert "Programmatic access" not in components
@@ -44,6 +46,7 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
         if component.get("type") == "tabitem"
     }
     assert tab_props["Stage 0 - Download"]["visible"] is False
+    assert tab_props["Stage 2 - Detect"]["visible"] is False
     assert tab_props["Stage 3 - Classify"]["visible"] is True
 
 

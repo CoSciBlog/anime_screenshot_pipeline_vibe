@@ -47,7 +47,7 @@ STAGES = OrderedDict(
     [
         (0, ("Download", "Download anime or booru sources. Affects source variety, size, and download time.")),
         (1, ("Frames", "Extract frames and remove near duplicates. Reduces repetition before later analysis.")),
-        (2, ("Crop", "Detect characters and create crops. Detection choices trade recall against runtime.")),
+        (2, ("Detect", "Detect characters and create crops. Detection choices trade recall against runtime.")),
         (3, ("Classify", "Match crops to reference characters or clusters. This is where reference images are used.")),
         (4, ("Select", "Build the training image set and resize exports. Controls dataset quality and disk size.")),
         (5, ("Caption", "Generate tags and captions. Thresholds change caption precision and training signal.")),
@@ -106,7 +106,7 @@ FIELD_GROUPS = OrderedDict(
             ],
         ),
         (
-            "Stage 2 - Crop",
+            "Stage 2 - Detect",
             [
                 "min_crop_size",
                 "crop_with_head",

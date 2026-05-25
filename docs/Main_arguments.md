@@ -35,7 +35,7 @@ Below are some other general arguments that affect globally how the pipeline is 
 ```
 0: "download"  
 1: "extract", "remove_similar", or "remove_duplicates"  
-2: "crop"  
+2: "detect" (legacy alias: "crop")
 3: "classify"  
 4: "select"  
 5: "tag", "caption", or "tag_and_caption"  

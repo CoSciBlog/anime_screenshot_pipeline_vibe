@@ -43,7 +43,7 @@ image_prefix = {}
 # Episode number to start with, when not provided we try to infer it from video file name
 ep_init = {}
 
-# Character Cropping Configuration
+# Stage 2 - Character Detection and Crop Generation Configuration
 [character_cropping]
 # Use 3 stage crop to get halfbody and head crops
 # Set to {} or comment this line to disable

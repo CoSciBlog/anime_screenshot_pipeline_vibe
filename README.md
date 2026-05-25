@@ -16,7 +16,7 @@ The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local 
 - All CLI settings from `anime2sd/parse_arguments.py` are rendered as controls, grouped by the stage where they take effect. Only settings tabs for enabled stages are displayed; **General** remains available for shared paths and output options.
 - **Workflow** is shown first, followed by an optional, collapsible two-column **Configuration** panel for workspace and TOML configuration management.
 - Each control displays the original argument description as inline help text, with concise quality, matching, or performance guidance where the setting affects results.
-- Stages are selected independently. Stages 1 (frame extraction) and 2 (cropping) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
+- Stages are selected independently. Stages 1 (frame extraction) and 2 (character detection and crop generation) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
 - The UI uses one TOML configuration file per workflow. **Save configuration** stores stage selection, workspace root, and every setting together beneath `configs/ui/saved/`; **Export settings** downloads that same file. Use **Import configuration** to reload it. Presets are not used in the UI. Saved configurations are intentionally ignored by Git because they commonly contain local paths.
 - A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder. Missing `src`, `ref`, and `logs` folders are created automatically on run or with **Create workspace folders**; `dst` stage folders are created only when output is produced. Existing workspace contents are preserved; a separate **Clear generated output** action removes only generated `dst` contents.
 - Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a configuration is saved or a run starts.
@@ -42,7 +42,7 @@ C:\datasets\anime\frieren_project\
     `-- training\        # Final selected and captioned training data
 ```
 
-The content expected in `src` depends on the first enabled stage: videos for Stage 1, raw images for Stage 2, or already cropped images when starting directly at Stage 3. Keep processing stages that depend on each other's output enabled consecutively, for example Stages 2 and 3 together.
+The content expected in `src` depends on the first enabled stage: videos for Stage 1, raw images for Stage 2 - Detect, or already detected/cropped character images when starting directly at Stage 3. Keep processing stages that depend on each other's output enabled consecutively, for example Stages 2 and 3 together.
 
 Running **Create workspace folders** is non-destructive: existing `src`, `ref`, `logs`, and `dst` content is retained. It does not create empty `dst`, `dst/intermediate`, or `dst/training` directories. Use **Clear generated output** only when you intentionally want to remove the contents below `dst`; it removes the output tree and does not touch source or reference images.
 

@@ -14,15 +14,15 @@ For conversion please use [utilities/convert_metadata.py](utilities/convert_meta
 The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local workflow editor:
 
 - All CLI settings from `anime2sd/parse_arguments.py` are rendered as controls, grouped by the stage where they take effect. Only settings tabs for enabled stages are displayed; **General** remains available for shared paths and output options.
-- **Workflow** is shown first, followed by a two-column **Configuration** panel for workspace and profile management.
+- **Workflow** is shown first, followed by an optional, collapsible two-column **Configuration** panel for workspace and profile management.
 - Each control displays the original argument description as inline help text, with concise quality, matching, or performance guidance where the setting affects results.
 - Stages are selected independently. Stages 1 (frame extraction) and 2 (cropping) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
-- UI profiles can be exported to and imported from TOML. A single **Save profile** action stores the loaded starting preset values, stage selection, workspace root, and any field edits together in one executable profile beneath `configs/ui/saved/`. These files are intentionally ignored by Git because they commonly contain local paths.
-- A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder and create the required working structure with one button. Existing workspace contents are preserved; a separate **Clear generated output** action removes only generated `dst` contents.
+- UI profiles can be imported from TOML. A single **Save profile** action stores the loaded starting preset values, stage selection, workspace root, and any field edits together in one executable profile beneath `configs/ui/saved/`, then adds that profile to the **Starting preset** list. These files are intentionally ignored by Git because they commonly contain local paths.
+- A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder. Missing workspace folders are created automatically on run or with **Create workspace folders**. Existing workspace contents are preserved; a separate **Clear generated output** action removes only generated `dst` contents.
 - Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a profile is saved or a run starts.
 - Consecutive selected stages are executed as one pipeline segment through `automatic_pipeline.py`, so generated output flows into the next selected stage correctly.
 - **Stop pipeline** cancels the active UI run and terminates its pipeline process tree without closing the web interface.
-- Pipeline progress is mirrored in both the web run log and the launching terminal.
+- A live status message and progress bar show the active stage and completed selected stages. Progress output is deduplicated in the web log and mirrored in the launching terminal.
 - **Shut down server** terminates an active pipeline if necessary and closes the local Gradio server completely.
 
 The UI listens only on `http://127.0.0.1:7866`. Port `7866` is intentionally fixed for repeatable bookmarks and Pinokio integration. Close another service using that port before launching Frame Lab.
@@ -64,6 +64,12 @@ C:\datasets\anime\references\
 
 Nested folder names become character labels. Images directly inside `references` are also supported: their label is taken from the file name up to the first underscore, for example `frieren_01.png` becomes `frieren`. Subfolders are preferable because the label is explicit and each character can hold multiple reference images.
 
+Stage 3 also provides dataset-balance and storage controls:
+
+- `--max_images_per_character` limits the total saved matched images for each recognized reference character.
+- `--max_images_per_character_per_episode` limits repeated images for one character within an inferred episode. Episodes are detected from `S01E01`-style file or folder names; otherwise the immediate source folder is used.
+- `--remove_classified_aux_files` removes generated `.json` metadata and `.npy` CCIP feature cache files from the classified output only after dependent selected stages have consumed them. Leave it disabled when resuming later from classified intermediate output.
+
 ### Preprocessing Messages
 
 On the first processing pass, raw source images commonly do not yet have companion `_meta.json` files. The pipeline creates default metadata for those images before classification and later processing. This is expected initialization, not a failed match or missing image; the UI now reports it as one informational summary instead of one warning per image.
@@ -104,6 +110,8 @@ Pipeline logs use severity colors when output is connected to an interactive ter
 - `CRITICAL` is bold red.
 
 Color codes are omitted automatically when output is piped into the Gradio run log or a file. Set `NO_COLOR=1` to disable ANSI coloring in a terminal.
+
+The UI summarizes ordinary `tqdm` phases with their reported progress and ETA. During the synchronous OPTICS clustering fit, the underlying library does not expose reliable intermediate percentage or ETA data; the UI displays an active clustering heartbeat and elapsed time until that phase finishes.
 
 ### Pinokio Launcher
 

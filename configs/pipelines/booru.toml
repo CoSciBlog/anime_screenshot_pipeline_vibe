@@ -61,6 +61,12 @@ use_3stage_crop = 2
 character_ref_dir = "data/ref_images"
 # The number of additional reference images to add to each character from classification result"
 n_add_to_ref_per_character = 20
+# Maximum recognized images kept for each reference character; 0 disables the limit
+max_images_per_character = 0
+# Maximum recognized images kept for each reference character per SxxExx episode; 0 disables the limit
+max_images_per_character_per_episode = 0
+# Remove generated JSON/NPY classified helper files after dependent stages complete
+remove_classified_aux_files = false
 # Whether to ignore existing character metadata during classification
 ignore_character_metadata = false
 # Minimum cluster samples in character clustering

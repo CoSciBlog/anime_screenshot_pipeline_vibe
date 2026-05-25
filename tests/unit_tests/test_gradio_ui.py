@@ -21,9 +21,14 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
     assert "Create workspace folders" in components
     assert "Clear generated output" in components
     assert "Save profile" in components
+    assert "Saved profile" not in components
     assert "Save settings to profile" not in components
     assert "Stage guide" in components
+    assert "Configuration" in components
     assert "Programmatic access" not in components
+    assert "--max_images_per_character" in components
+    assert "--max_images_per_character_per_episode" in components
+    assert "--remove_classified_aux_files" in components
     assert "create_workspace" in dependencies
     assert "clear_workspace_output" in dependencies
     assert "run_saved_profile" in dependencies
@@ -123,6 +128,25 @@ def test_run_output_is_mirrored_to_terminal(capsys):
     assert capsys.readouterr().out == "running stage\n"
 
 
+def test_run_log_cleaning_replaces_repeated_progress_lines():
+    history = []
+
+    ui.append_run_history(history, "Extract dataset features: 40%|#### | 4/10 [00:01<00:02]")
+    ui.append_run_history(history, "Extract dataset features: 50%|#####| 5/10 [00:02<00:02]")
+
+    assert ui.clean_run_line("old progress\r\x1b[Avisible\r\n") == "visible"
+    assert history == ["Extract dataset features: 50%|#####| 5/10 [00:02<00:02]"]
+    assert "50%" in ui.run_detail_from_line(history[0])
+
+
+def test_stage_progress_reports_completed_and_current_stage():
+    markup = ui.progress_markup([2, 3, 4], {2}, 3, "Clustering active")
+
+    assert "Current: Stage 3 - Classify" in markup
+    assert "1 of 3 stages complete" in markup
+    assert "Clustering active" in markup
+
+
 def test_consecutive_selected_stages_are_run_as_one_pipeline_segment():
     assert ui.stage_ranges([2, 3, 5, 6, 7]) == [(2, 3), (5, 7)]
 
@@ -135,18 +159,42 @@ def test_saved_profile_records_the_starting_preset_with_ui_settings(tmp_path, mo
     monkeypatch.setattr(ui, "ROOT", tmp_path)
     monkeypatch.setattr(ui, "SAVED_CONFIG_DIR", tmp_path / "configs" / "ui" / "saved")
 
-    _status, output_path = ui.save_configuration(
+    _status, preset_update = ui.save_configuration(
         "combined",
         "configs/pipelines/booru.toml",
         r"C:\datasets\anime\project",
         ["2", "3"],
         *values,
     )
+    output_path = ui.SAVED_CONFIG_DIR / "combined.toml"
     saved = ui.toml.load(output_path)
 
     assert saved["ui"]["source_preset"] == "configs/pipelines/booru.toml"
     assert saved["ui"]["enabled_stages"] == [2, 3]
     assert saved["ui"]["workspace_root"] == os.path.normpath(r"C:\datasets\anime\project")
+    assert preset_update["value"] == "configs/ui/saved/combined.toml"
+    assert "configs/ui/saved/combined.toml" in preset_update["choices"]
+
+
+def test_running_from_form_creates_missing_workspace_folders(tmp_path, monkeypatch):
+    captured = []
+
+    def fake_execute(stages, _config):
+        captured.extend(stages)
+        yield "status", "progress", "log"
+
+    monkeypatch.setattr(ui, "execute_config", fake_execute)
+    values = [
+        ui.component_value(action, ui.defaults().get(action.dest))
+        for action in ui.ACTIONS
+    ]
+
+    result = list(ui.run_selected_stages(["2", "3"], str(tmp_path), *values))
+
+    assert result == [("status", "progress", "log")]
+    assert captured == [2, 3]
+    assert (tmp_path / "dst" / "intermediate").is_dir()
+    assert (tmp_path / "logs").is_dir()
 
 
 def test_stop_pipeline_terminates_active_child_process():

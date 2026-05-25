@@ -69,6 +69,12 @@ use_3stage_crop = {}
 character_ref_dir = "path/to/reference/character/images"
 # The number of additional reference images to add to each character from classification result"
 n_add_to_ref_per_character = 0
+# Maximum number of classified images saved for one recognized reference character; 0 disables the limit
+max_images_per_character = 0
+# Maximum number of classified images saved for one recognized reference character per SxxExx episode; 0 disables the limit
+max_images_per_character_per_episode = 0
+# Remove generated JSON/NPY auxiliary files from classified output after selected stages no longer need them
+remove_classified_aux_files = false
 # Whether to disable matching character labels for noise images
 no_extract_from_noise = false
 # Whether to disable final filtering for character consistency

@@ -295,9 +295,25 @@ def classify_characters(args, stage, logger):
         same_threshold_rel=args.same_threshold_rel,
         same_threshold_abs=args.same_threshold_abs,
         n_add_images_to_ref=args.n_add_to_ref_per_character,
+        max_images_per_character=args.max_images_per_character,
+        max_images_per_character_per_episode=args.max_images_per_character_per_episode,
         move=move,
         logger=logger,
     )
+    if args.remove_classified_aux_files and args.end_stage < 4:
+        cleanup_classified_aux_files(dst_dir, logger)
+
+
+def cleanup_classified_aux_files(classified_dir, logger):
+    """Remove generated metadata/cache files from classified output on request."""
+    removed = 0
+    if os.path.isdir(classified_dir):
+        for root, _dirs, files in os.walk(classified_dir):
+            for filename in files:
+                if filename.lower().endswith((".json", ".npy")):
+                    os.remove(os.path.join(root, filename))
+                    removed += 1
+    logger.info(f"Removed {removed} JSON/NPY auxiliary file(s) from {classified_dir}.")
 
 
 def select_dataset_images(args, stage, logger):
@@ -348,6 +364,8 @@ def select_dataset_images(args, stage, logger):
         duplicate_remover=duplicate_remover,
         logger=logger,
     )
+    if args.remove_classified_aux_files:
+        cleanup_classified_aux_files(classified_dir, logger)
 
     if args.remove_intermediate:
         shutil.rmtree(classified_dir)

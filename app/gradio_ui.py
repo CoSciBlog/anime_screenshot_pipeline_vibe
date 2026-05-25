@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import html
 import os
+import queue
 import re
 import signal
 import shutil
@@ -33,6 +35,17 @@ PIPELINE_RUN_LOCK = threading.Lock()
 PIPELINE_STOP_REQUESTED = threading.Event()
 ACTIVE_PIPELINE_PROCESS: subprocess.Popen[str] | None = None
 WORKSPACE_DIRECTORIES = ("src", "dst", "dst/intermediate", "dst/training", "ref", "logs")
+BUILTIN_PRESETS = (
+    "configs/pipelines/screenshots.toml",
+    "configs/pipelines/booru.toml",
+    "configs/pipelines/base.toml",
+)
+ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+STAGE_START_RE = re.compile(r"Start stage\s+(\d+)")
+TQDM_PROGRESS_RE = re.compile(
+    r"(?P<label>[^:\n]+):\s*(?P<percent>\d+)%\|.*?\|\s*"
+    r"(?P<done>\d+)/(?P<total>\d+)\s*\[(?P<timing>[^\]]+)\]"
+)
 
 STAGES = OrderedDict(
     [
@@ -111,6 +124,9 @@ FIELD_GROUPS = OrderedDict(
             [
                 "character_ref_dir",
                 "n_add_to_ref_per_character",
+                "max_images_per_character",
+                "max_images_per_character_per_episode",
+                "remove_classified_aux_files",
                 "ignore_character_metadata",
                 "no_extract_from_noise",
                 "no_filter_characters",
@@ -243,6 +259,9 @@ FIELD_GUIDANCE = {
     "detect_level": "Higher-capacity detection can improve crop recall with slower processing.",
     "use_3stage_crop": "Additional head/halfbody crops can improve training coverage but are slow to generate.",
     "n_add_to_ref_per_character": "Expands references after matching; may improve later runs but can propagate mistakes.",
+    "max_images_per_character": "Caps recognized samples per reference character; reduces imbalance and storage at the cost of pose variety.",
+    "max_images_per_character_per_episode": "Caps repeated episode-specific matches per character to reduce near-duplicate dominance.",
+    "remove_classified_aux_files": "Saves disk space after classification output is consumed, but prevents later reuse of cached features and metadata.",
     "no_filter_characters": "Disabling consistency filtering retains more samples at higher label-noise risk.",
     "keep_unnamed_clusters": "Keeps unmatched material for coverage, but it does not gain reference labels.",
     "cluster_merge_threshold": "Controls cluster joining; permissive matching risks merging different characters.",
@@ -375,6 +394,55 @@ STYLE = """
 .workspace-card .prose {
   color: var(--muted);
   font-size: .89rem;
+}
+.pipeline-status {
+  border: 1px solid var(--line);
+  border-radius: .55rem;
+  background: var(--panel-raised);
+  margin: .85rem 0 .5rem;
+  padding: .75rem .85rem;
+}
+.pipeline-status h3 {
+  color: var(--ink);
+  font-size: 1rem;
+  margin: 0 0 .2rem;
+}
+.pipeline-status p {
+  color: var(--muted);
+  margin: 0;
+}
+.pipeline-progress {
+  border: 1px solid var(--line);
+  border-radius: .55rem;
+  background: var(--panel-raised);
+  margin-bottom: .7rem;
+  padding: .65rem .8rem;
+}
+.pipeline-progress-header {
+  color: var(--muted);
+  display: flex;
+  font-size: .85rem;
+  justify-content: space-between;
+  margin-bottom: .45rem;
+}
+.pipeline-progress-track {
+  background: var(--line);
+  border-radius: 999px;
+  height: .55rem;
+  overflow: hidden;
+}
+.pipeline-progress-fill {
+  background: var(--accent);
+  border-radius: 999px;
+  height: 100%;
+  transition: width .22s ease;
+}
+.config-accordion {
+  margin-top: 1rem;
+}
+.run-log textarea {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  line-height: 1.42;
 }
 .gradio-container .primary {
   background: var(--accent);
@@ -574,8 +642,105 @@ def clear_workspace_output(root_value: str) -> str:
     return f"No generated output to clear in `{dst}`. Empty output folders are ready."
 
 
+def available_profiles() -> list[str]:
+    profiles = list(BUILTIN_PRESETS)
+    if SAVED_CONFIG_DIR.exists():
+        profiles.extend(
+            str(path.relative_to(ROOT)).replace("\\", "/")
+            for path in sorted(SAVED_CONFIG_DIR.glob("*.toml"))
+            if path.name != RUNTIME_CONFIG.name
+        )
+    return profiles
+
+
+def clean_run_line(line: str) -> str:
+    clean_fragments = (
+        ANSI_ESCAPE_RE.sub("", line).replace("\r\n", "\n").replace("\r", "\n").splitlines()
+    )
+    return clean_fragments[-1].strip() if clean_fragments else ""
+
+
+def append_run_history(history: list[str], line: str) -> None:
+    progress_match = TQDM_PROGRESS_RE.search(line)
+    if progress_match:
+        label = progress_match.group("label").strip()
+        for index in range(len(history) - 1, max(-1, len(history) - 10), -1):
+            if history[index].startswith(f"{label}:"):
+                history[index] = line
+                return
+    history.append(line)
+    del history[:-160]
+
+
+def run_detail_from_line(line: str) -> str | None:
+    match = TQDM_PROGRESS_RE.search(line)
+    if not match:
+        return None
+    return (
+        f"{match.group('label').strip()}: {match.group('percent')}% "
+        f"({match.group('done')}/{match.group('total')}) [{match.group('timing')}]"
+    )
+
+
+def status_markup(title: str, message: str) -> str:
+    return (
+        "<div class='pipeline-status'>"
+        f"<h3>{html.escape(title)}</h3><p>{html.escape(message)}</p>"
+        "</div>"
+    )
+
+
+def progress_markup(
+    selected: list[int],
+    completed: set[int],
+    current: int | None,
+    detail: str = "",
+) -> str:
+    total = len(selected)
+    complete_count = len(completed.intersection(selected))
+    percent = round((complete_count / total) * 100) if total else 0
+    current_text = "Waiting to start"
+    if current is not None:
+        current_text = f"Current: Stage {current} - {STAGES[current][0]}"
+    elif total and complete_count == total:
+        current_text = "All selected stages complete"
+    label = f"{complete_count} of {total} stages complete"
+    if detail:
+        current_text = f"{current_text} | {detail}"
+    return (
+        "<div class='pipeline-progress'>"
+        "<div class='pipeline-progress-header'>"
+        f"<span>{html.escape(current_text)}</span><span>{html.escape(label)}</span>"
+        "</div>"
+        "<div class='pipeline-progress-track'>"
+        f"<div class='pipeline-progress-fill' style='width:{percent}%'></div>"
+        "</div></div>"
+    )
+
+
 def mirror_run_output(line: str) -> None:
     print(line, end="" if line.endswith("\n") else "\n", flush=True)
+
+
+def process_output_with_heartbeat(process: subprocess.Popen[str]):
+    messages: queue.Queue[str | None] = queue.Queue()
+
+    def read_output() -> None:
+        assert process.stdout is not None
+        for line in process.stdout:
+            messages.put(line)
+        messages.put(None)
+
+    threading.Thread(target=read_output, daemon=True).start()
+    while True:
+        try:
+            message = messages.get(timeout=1)
+        except queue.Empty:
+            yield ""
+            continue
+        if message is None:
+            return
+        yield message
 
 
 def stage_values(selected: Iterable[Any] | None) -> list[int]:
@@ -620,7 +785,11 @@ def save_configuration(
     path = profile_path(name)
     with path.open("w", encoding="utf-8") as handle:
         toml.dump(config, handle)
-    return f"Configuration saved: {path.relative_to(ROOT)}", str(path)
+    relative_path = str(path.relative_to(ROOT)).replace("\\", "/")
+    return (
+        f"Profile saved and added to available configurations: `{relative_path}`",
+        gr.update(choices=available_profiles(), value=relative_path),
+    )
 
 
 def load_configuration(preset: str, uploaded_path: str | None):
@@ -689,11 +858,31 @@ def shutdown_server() -> str:
 
 def execute_config(stages: list[int], config: dict[str, Any]):
     global ACTIVE_PIPELINE_PROCESS
+    completed: set[int] = set()
+    current_stage: int | None = None
+    detail = ""
+    clustering_started: float | None = None
+
+    def update(title: str, message: str, history: list[str]):
+        return (
+            status_markup(title, message),
+            progress_markup(stages, completed, current_stage, detail),
+            "\n".join(history),
+        )
+
     if not stages:
-        yield "No stage selected. Enable at least one checkbox."
+        yield (
+            status_markup("No stages selected", "Enable at least one stage before running."),
+            progress_markup([], set(), None),
+            "No stage selected. Enable at least one checkbox.",
+        )
         return
     if not PIPELINE_RUN_LOCK.acquire(blocking=False):
-        yield "A pipeline run is already active. Stop it before starting another run."
+        yield (
+            status_markup("Pipeline already running", "Stop the active run before starting another."),
+            progress_markup(stages, set(), None),
+            "A pipeline run is already active. Stop it before starting another run.",
+        )
         return
 
     PIPELINE_STOP_REQUESTED.clear()
@@ -706,16 +895,17 @@ def execute_config(stages: list[int], config: dict[str, Any]):
             f"Runtime configuration: {RUNTIME_CONFIG.relative_to(ROOT)}",
             f"Stages: {', '.join(str(stage) for stage in stages)}",
         ]
+        yield update("Pipeline starting", f"Preparing {len(stages)} selected stage(s).", history)
         for start_stage, end_stage in stage_ranges(stages):
             if PIPELINE_STOP_REQUESTED.is_set():
-                history.append("Pipeline stopped by user.")
-                yield "\n".join(history)
+                append_run_history(history, "Pipeline stopped by user.")
+                yield update("Pipeline stopped", "Processing was stopped by the user.", history)
                 return
             titles = ", ".join(
                 f"{stage}: {STAGES[stage][0]}" for stage in range(start_stage, end_stage + 1)
             )
-            history.append(f"\n--- Stages {titles} ---")
-            yield "\n".join(history)
+            append_run_history(history, f"--- Stages {titles} ---")
+            yield update("Pipeline running", f"Starting {titles}.", history)
             command = [
                 sys.executable,
                 str(ROOT / "automatic_pipeline.py"),
@@ -742,29 +932,72 @@ def execute_config(stages: list[int], config: dict[str, Any]):
             )
             with PIPELINE_PROCESS_LOCK:
                 ACTIVE_PIPELINE_PROCESS = process
-            assert process.stdout is not None
-            for line in process.stdout:
-                mirror_run_output(line)
-                history.append(line.rstrip())
-                history = history[-400:]
-                yield "\n".join(history)
+            for raw_line in process_output_with_heartbeat(process):
+                if not raw_line:
+                    if clustering_started is not None:
+                        elapsed = int(time.monotonic() - clustering_started)
+                        detail = (
+                            f"Clustering active; elapsed {elapsed}s; "
+                            "ETA unavailable during OPTICS fitting."
+                        )
+                        yield update(
+                            "Pipeline running",
+                            "Classification clustering is still processing.",
+                            history,
+                        )
+                    continue
+                mirror_run_output(raw_line)
+                line = clean_run_line(raw_line)
+                if not line:
+                    continue
+                stage_match = STAGE_START_RE.search(line)
+                if stage_match:
+                    next_stage = int(stage_match.group(1))
+                    if current_stage is not None and current_stage != next_stage:
+                        completed.add(current_stage)
+                    current_stage = next_stage
+                    detail = ""
+                    clustering_started = None
+                parsed_detail = run_detail_from_line(line)
+                if parsed_detail:
+                    detail = parsed_detail
+                if "Clustering OPTICS:" in line:
+                    clustering_started = time.monotonic()
+                    detail = "Clustering active; ETA unavailable during OPTICS fitting."
+                append_run_history(history, line)
+                running_stage = current_stage if current_stage is not None else start_stage
+                yield update(
+                    "Pipeline running",
+                    f"Processing Stage {running_stage} - {STAGES[running_stage][0]}.",
+                    history,
+                )
             return_code = process.wait()
             with PIPELINE_PROCESS_LOCK:
                 if ACTIVE_PIPELINE_PROCESS is process:
                     ACTIVE_PIPELINE_PROCESS = None
             if PIPELINE_STOP_REQUESTED.is_set():
-                history.append("Pipeline stopped by user.")
-                yield "\n".join(history)
+                append_run_history(history, "Pipeline stopped by user.")
+                yield update("Pipeline stopped", "Processing was stopped by the user.", history)
                 return
             if return_code != 0:
-                history.append(
+                append_run_history(
+                    history,
                     f"Stages {start_stage}-{end_stage} failed with exit code {return_code}."
                 )
-                yield "\n".join(history)
+                yield update("Pipeline failed", "Review the run log for the reported error.", history)
                 return
-            history.append(f"Stages {start_stage}-{end_stage} completed.")
-        history.append("All selected stages completed.")
-        yield "\n".join(history)
+            completed.update(stage for stage in stages if start_stage <= stage <= end_stage)
+            current_stage = None
+            detail = ""
+            clustering_started = None
+            append_run_history(history, f"Stages {start_stage}-{end_stage} completed.")
+            yield update("Pipeline running", "Continuing with remaining selected stages.", history)
+        append_run_history(history, "All selected stages completed.")
+        yield update(
+            "Pipeline complete",
+            f"Completed {len(stages)} selected stage(s).",
+            history,
+        )
     finally:
         with PIPELINE_PROCESS_LOCK:
             process = ACTIVE_PIPELINE_PROCESS
@@ -776,8 +1009,18 @@ def execute_config(stages: list[int], config: dict[str, Any]):
 
 
 def run_selected_stages(selected: list[str], workspace_root: str, *values: Any):
+    stages = stage_values(selected)
+    if normalize_path_value(workspace_root):
+        *_updates, workspace_status = create_workspace_structure(workspace_root)
+        if workspace_status.startswith("Cannot create workspace"):
+            yield (
+                status_markup("Workspace unavailable", workspace_status),
+                progress_markup(stages, set(), None),
+                workspace_status,
+            )
+            return
     config = apply_workspace_paths(workspace_root, build_config(values, ACTIONS))
-    yield from execute_config(stage_values(selected), config)
+    yield from execute_config(stages, config)
 
 
 def run_saved_profile(config_path: str, stages_text: str):
@@ -791,7 +1034,15 @@ def run_saved_profile(config_path: str, stages_text: str):
         stages = stage_values(parse_list(stages_text))
     else:
         stages = stage_values(ui_config.get("enabled_stages", []))
-    yield from execute_config(stages, loaded)
+    workspace_root = ui_config.get("workspace_root", "")
+    if normalize_path_value(workspace_root):
+        *_updates, workspace_status = create_workspace_structure(str(workspace_root))
+        if workspace_status.startswith("Cannot create workspace"):
+            yield workspace_status
+            return
+        loaded = apply_workspace_paths(str(workspace_root), loaded)
+    for _status, _progress, log in execute_config(stages, loaded):
+        yield log
 
 
 def make_component(action: argparse.Action, value: Any):
@@ -843,10 +1094,17 @@ def build_interface() -> gr.Blocks:
             with gr.Row():
                 run_button = gr.Button("Run pipeline", variant="primary")
                 stop_button = gr.Button("Stop pipeline", variant="stop")
-            output = gr.Textbox(label="Run log", lines=18, interactive=False)
+            run_status = gr.HTML(
+                status_markup("Ready", "Select stages and run the pipeline.")
+            )
+            stage_progress = gr.HTML(
+                progress_markup(stage_values(DEFAULT_ENABLED_STAGES), set(), None)
+            )
+            output = gr.Textbox(
+                label="Run log", lines=18, interactive=False, elem_classes="run-log"
+            )
 
-        with gr.Column(elem_classes="run-panel"):
-            gr.HTML("<p class='panel-label'>Configuration</p>")
+        with gr.Accordion("Configuration", open=False, elem_classes="run-panel config-accordion"):
             with gr.Row():
                 with gr.Column():
                     with gr.Column(elem_classes="workspace-card"):
@@ -868,11 +1126,7 @@ def build_interface() -> gr.Blocks:
                         )
                 with gr.Column():
                     preset = gr.Dropdown(
-                        choices=[
-                            "configs/pipelines/screenshots.toml",
-                            "configs/pipelines/booru.toml",
-                            "configs/pipelines/base.toml",
-                        ],
+                        choices=available_profiles(),
                         value="configs/pipelines/screenshots.toml",
                         label="Starting preset",
                         info=(
@@ -888,7 +1142,6 @@ def build_interface() -> gr.Blocks:
                         info="One TOML file stores the preset-derived values, stage selection, paths, and edits.",
                     )
                     save_button = gr.Button("Save profile", variant="primary")
-                    downloaded = gr.File(label="Saved profile", interactive=False)
             status = gr.Markdown(f"Web interface: `http://127.0.0.1:{PORT}` (fixed port).")
             shutdown_button = gr.Button("Shut down server", variant="stop", elem_classes="shutdown-button")
 
@@ -945,7 +1198,7 @@ def build_interface() -> gr.Blocks:
         save_button.click(
             save_configuration,
             inputs=[profile_name, preset, workspace_root, stage_selector, *controls_in_action_order],
-            outputs=[status, downloaded],
+            outputs=[status, preset],
             api_name="save_configuration",
         )
         load_button.click(
@@ -957,7 +1210,7 @@ def build_interface() -> gr.Blocks:
         run_event = run_button.click(
             run_selected_stages,
             inputs=[stage_selector, workspace_root, *controls_in_action_order],
-            outputs=output,
+            outputs=[run_status, stage_progress, output],
             api_name="run_from_form",
             concurrency_limit=1,
             concurrency_id="pipeline_run",

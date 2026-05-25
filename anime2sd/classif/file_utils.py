@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import shutil
 import logging
 from tqdm import tqdm
@@ -18,6 +19,63 @@ from ..basics import (
     random_string,
 )
 from ..character import Character
+
+
+_EPISODE_PATTERN = re.compile(r"(s\d{1,3}e\d{1,4})", re.IGNORECASE)
+
+
+def get_episode_key(img_path: str) -> str:
+    """Get an episode identifier from a path or use its containing folder."""
+    for part in reversed(re.split(r"[\\/]", img_path)):
+        match = _EPISODE_PATTERN.search(part)
+        if match:
+            return match.group(1).upper()
+    return os.path.basename(os.path.dirname(img_path)) or "unknown"
+
+
+def limit_recognized_character_images(
+    image_files: np.ndarray,
+    images: np.ndarray,
+    labels: np.ndarray,
+    character_mapping: Optional[Dict[int, Character]],
+    max_per_character: int = 0,
+    max_per_episode: int = 0,
+    logger: Optional[logging.Logger] = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Limit saved images for named characters while retaining unnamed results."""
+    if not character_mapping or (max_per_character <= 0 and max_per_episode <= 0):
+        return image_files, images, labels
+    if logger is None:
+        logger = logging.getLogger()
+
+    kept = np.ones(len(labels), dtype=bool)
+    total_counts: Dict[int, int] = {}
+    episode_counts: Dict[Tuple[int, str], int] = {}
+    removed_counts: Dict[int, int] = {}
+
+    for index, (img_path, label) in enumerate(zip(image_files, labels)):
+        label = int(label)
+        if label < 0 or label not in character_mapping:
+            continue
+        episode_key = get_episode_key(str(img_path))
+        total_key = total_counts.get(label, 0)
+        episode_total = episode_counts.get((label, episode_key), 0)
+        exceeds_total = max_per_character > 0 and total_key >= max_per_character
+        exceeds_episode = max_per_episode > 0 and episode_total >= max_per_episode
+        if exceeds_total or exceeds_episode:
+            kept[index] = False
+            removed_counts[label] = removed_counts.get(label, 0) + 1
+            continue
+        total_counts[label] = total_key + 1
+        episode_counts[(label, episode_key)] = episode_total + 1
+
+    for label, count in removed_counts.items():
+        logger.info(
+            "Limited classified images for %s: removed %d image(s).",
+            character_mapping[label].to_string(caption_style=False),
+            count,
+        )
+    return image_files[kept], images[kept], labels[kept]
 
 
 def load_image_features_and_characters(

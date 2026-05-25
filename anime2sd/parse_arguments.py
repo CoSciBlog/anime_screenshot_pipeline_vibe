@@ -356,6 +356,33 @@ def create_parser():
         ),
     )
     parser.add_argument(
+        "--max_images_per_character",
+        type=int,
+        default=0,
+        help=(
+            "Maximum number of classified images to keep for each recognized "
+            "reference character. Set to 0 to disable."
+        ),
+    )
+    parser.add_argument(
+        "--max_images_per_character_per_episode",
+        type=int,
+        default=0,
+        help=(
+            "Maximum number of classified images to keep for each recognized "
+            "reference character per episode. Episodes are read from S01E01-style "
+            "folder or file names. Set to 0 to disable."
+        ),
+    )
+    parser.add_argument(
+        "--remove_classified_aux_files",
+        action="store_true",
+        help=(
+            "Remove generated JSON metadata and NPY CCIP cache files from the "
+            "classified output after they are no longer needed by selected stages."
+        ),
+    )
+    parser.add_argument(
         "--ignore_character_metadata",
         action="store_true",
         help=(

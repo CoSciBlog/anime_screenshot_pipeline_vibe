@@ -11,7 +11,12 @@ from imgutils.metrics import ccip_batch_differences
 from ..basics import remove_empty_folders
 from ..character import Character
 
-from .file_utils import load_image_features_and_characters, parse_ref_dir, save_to_dir
+from .file_utils import (
+    limit_recognized_character_images,
+    load_image_features_and_characters,
+    parse_ref_dir,
+    save_to_dir,
+)
 from .imagewise import extract_from_noise, filter_characters_from_images
 from .merge_clusters import (
     merge_clusters,
@@ -50,6 +55,10 @@ def cluster_characters_basics(
     """
     if logger is None:
         logger = logging.getLogger()
+    logger.info(
+        "Clustering preparation: computing similarity data for %d image(s) ...",
+        len(images),
+    )
     batch_diff = ccip_batch_differences(images)
     batch_same = batch_diff <= ccip_default_threshold()
 
@@ -57,7 +66,11 @@ def cluster_characters_basics(
     def _metric(x, y):
         return batch_diff[int(x), int(y)].item()
 
-    logger.info("Clustering ...")
+    logger.info(
+        "Clustering OPTICS: fitting %d image(s); elapsed time is reported by the UI "
+        "while this operation runs.",
+        len(images),
+    )
     samples = np.arange(len(images)).reshape(-1, 1)
     # max_eps, _ = ccip_default_clustering_params(method='optics_best')
     clustering = OPTICS(min_samples=clu_min_samples, metric=_metric).fit(samples)
@@ -248,6 +261,8 @@ def classify_from_directory(
     same_threshold_rel: float = 0.6,
     same_threshold_abs: int = 10,
     n_add_images_to_ref: int = 0,
+    max_images_per_character: int = 0,
+    max_images_per_character_per_episode: int = 0,
     move: bool = False,
     logger: Optional[logging.Logger] = None,
 ):
@@ -299,6 +314,11 @@ def classify_from_directory(
         n_add_images_to_ref (int):
             The number of images to add to the reference directory per character.
             Defaults to 0.
+        max_images_per_character (int):
+            Maximum number of classified images saved for each known character.
+        max_images_per_character_per_episode (int):
+            Maximum number of classified images saved for each known character
+            within an inferred episode.
         move (bool):
             Whether to move or copy files
         logger (Optional[logging.Logger]):
@@ -457,6 +477,16 @@ def classify_from_directory(
             character_mapping,
             logger=logger,
         )
+
+    image_files, images, labels = limit_recognized_character_images(
+        image_files,
+        images,
+        labels,
+        character_mapping,
+        max_per_character=max_images_per_character,
+        max_per_episode=max_images_per_character_per_episode,
+        logger=logger,
+    )
 
     save_to_dir(
         image_files,

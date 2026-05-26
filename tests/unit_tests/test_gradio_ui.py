@@ -203,7 +203,8 @@ def test_global_configuration_is_loaded_with_stages_and_settings_at_startup(tmp_
     with path.open("w", encoding="utf-8") as handle:
         ui.toml.dump(
             {
-                "tag_threshold": 0.75,
+                "tag_threshold": "0.75",
+                "classification_chunk_size": "1024",
                 "ui": {
                     "enabled_stages": [2, 5],
                     "workspace_root": r"C:\datasets\loaded",
@@ -217,10 +218,14 @@ def test_global_configuration_is_loaded_with_stages_and_settings_at_startup(tmp_
     tag_threshold_index = next(
         index for index, action in enumerate(ui.ACTIONS) if action.dest == "tag_threshold"
     )
+    classification_chunk_size_index = next(
+        index for index, action in enumerate(ui.ACTIONS) if action.dest == "classification_chunk_size"
+    )
 
     assert updates[0]["value"] == r"C:\datasets\loaded"
     assert updates[1]["value"] == ["2", "5"]
     assert updates[tag_threshold_index + 2]["value"] == 0.75
+    assert updates[classification_chunk_size_index + 2]["value"] == 1024
     assert "Global configuration loaded" in updates[-1]
 
 

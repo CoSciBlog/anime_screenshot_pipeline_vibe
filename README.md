@@ -17,13 +17,13 @@ The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local 
 - **Workflow** is shown first, followed by an optional, collapsible two-column **Configuration** panel for workspace and TOML configuration management.
 - Each control displays the original argument description as inline help text, with concise quality, matching, or performance guidance where the setting affects results.
 - Stages are selected independently. Stages 1 (frame extraction) and 2 (character detection and crop generation) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
-- The UI uses one TOML configuration file per workflow. **Save configuration** stores stage selection, workspace root, and every setting together beneath `configs/ui/saved/`; **Export settings** downloads that same file. Use **Import configuration** to reload it. Presets are not used in the UI. Saved configurations are intentionally ignored by Git because they commonly contain local paths.
+- The UI uses one global TOML configuration file at `configs/ui/configuration.toml`. **Save configuration** stores stage selection, workspace root, and every setting together; the file is loaded automatically at application start and **Export settings** downloads it. Use **Import configuration** to load values from another TOML file before saving them globally. Presets are not used in the UI. The global configuration is intentionally ignored by Git because it commonly contains local paths.
 - A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder. Missing `src`, `ref`, and `logs` folders are created automatically on run or with **Create workspace folders**; `dst` stage folders are created only when output is produced. Existing workspace contents are preserved; a separate **Clear generated output** action removes only generated `dst` contents.
 - Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a configuration is saved or a run starts.
 - Consecutive selected stages are executed as one pipeline segment through `automatic_pipeline.py`, so generated output flows into the next selected stage correctly.
 - **Stop pipeline** cancels the active UI run and terminates its pipeline process tree without closing the web interface.
 - A live status message and progress bar show the active stage and completed selected stages. Progress output is deduplicated in the web log and mirrored in the launching terminal.
-- **Shut down server** terminates an active pipeline if necessary and closes the local Gradio server completely.
+- **Shut down server**, placed below the stage settings at the end of the page, terminates an active pipeline if necessary and closes the local Gradio server completely.
 
 The UI listens only on `http://127.0.0.1:7866`. Port `7866` is intentionally fixed for repeatable bookmarks and Pinokio integration. Close another service using that port before launching Frame Lab.
 The web UI is tested with Gradio `6.14.0`.
@@ -140,7 +140,7 @@ The Pinokio start script checks the Gradio dependency before launching, captures
 
 ### Programmatic UI Access
 
-Configure the workflow and select **Save configuration** to write its single TOML file, for example `configs/ui/saved/my_pipeline.toml`. The file contains both enabled stages and all stage settings and is available through **Export settings**. The named Gradio endpoint `run_saved_profile` accepts that project-relative configuration path and an optional comma-separated stage override.
+Configure the workflow and select **Save configuration** to write `configs/ui/configuration.toml`. The global file contains both enabled stages and all stage settings, is loaded when the app opens, and is available through **Export settings**. The named Gradio endpoint `run_saved_profile` accepts that project-relative configuration path and an optional comma-separated stage override.
 
 Python:
 
@@ -149,7 +149,7 @@ from gradio_client import Client
 
 client = Client("http://127.0.0.1:7866")
 result = client.predict(
-    "configs/ui/saved/my_pipeline.toml",
+    "configs/ui/configuration.toml",
     "3,4,5,6,7",
     api_name="/run_saved_profile",
 )
@@ -163,7 +163,7 @@ import { Client } from "@gradio/client";
 
 const app = await Client.connect("http://127.0.0.1:7866");
 const result = await app.predict("/run_saved_profile", [
-  "configs/ui/saved/my_pipeline.toml",
+  "configs/ui/configuration.toml",
   "3,4,5,6,7"
 ]);
 console.log(result.data);
@@ -174,7 +174,7 @@ Curl:
 ```bash
 curl -X POST "http://127.0.0.1:7866/call/run_saved_profile" \
   -H "Content-Type: application/json" \
-  -d '{"data":["configs/ui/saved/my_pipeline.toml","3,4,5,6,7"]}'
+  -d '{"data":["configs/ui/configuration.toml","3,4,5,6,7"]}'
 ```
 
 The curl response contains an event identifier; consume its streamed result from `GET /call/run_saved_profile/<event_id>`. The original CLI shown below remains available for scripting without a running UI.

@@ -23,6 +23,7 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
     assert "Save configuration" in components
     assert "Export settings" in components
     assert "Starting preset" not in components
+    assert "Configuration name" not in components
     assert "Import configuration" in components
     assert "2 - Detect" in components
     assert "2 - Crop" not in components
@@ -38,6 +39,7 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
     assert "run_saved_profile" in dependencies
     assert "stop_pipeline" in dependencies
     assert "shutdown_server" in dependencies
+    assert "load_global_configuration" in dependencies
     assert tabs[0] == "General"
     assert tabs[-1] == "Stage 7 - Balance"
     tab_props = {
@@ -48,6 +50,15 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
     assert tab_props["Stage 0 - Download"]["visible"] is False
     assert tab_props["Stage 2 - Detect"]["visible"] is False
     assert tab_props["Stage 3 - Classify"]["visible"] is True
+    shutdown_index = next(
+        index for index, component in enumerate(config["components"])
+        if "Shut down server" in str(component.get("props", {}))
+    )
+    last_stage_tab_index = max(
+        index for index, component in enumerate(config["components"])
+        if component.get("type") == "tabitem"
+    )
+    assert shutdown_index > last_stage_tab_index
 
 
 def test_stage_settings_visibility_follows_enabled_stages():
@@ -165,26 +176,52 @@ def test_consecutive_selected_stages_are_run_as_one_pipeline_segment():
     assert ui.stage_ranges([2, 3, 5, 6, 7]) == [(2, 3), (5, 7)]
 
 
-def test_saved_configuration_records_stages_and_exports_same_file(tmp_path, monkeypatch):
+def test_global_configuration_records_stages_and_exports_same_file(tmp_path, monkeypatch):
     values = [
         ui.component_value(action, ui.defaults().get(action.dest))
         for action in ui.ACTIONS
     ]
     monkeypatch.setattr(ui, "ROOT", tmp_path)
-    monkeypatch.setattr(ui, "SAVED_CONFIG_DIR", tmp_path / "configs" / "ui" / "saved")
+    monkeypatch.setattr(ui, "GLOBAL_CONFIG", tmp_path / "configs" / "ui" / "configuration.toml")
 
     _status, export_path = ui.save_configuration(
-        "combined",
         r"C:\datasets\anime\project",
         ["2", "3"],
         *values,
     )
-    output_path = ui.SAVED_CONFIG_DIR / "combined.toml"
+    output_path = ui.GLOBAL_CONFIG
     saved = ui.toml.load(output_path)
 
     assert saved["ui"]["enabled_stages"] == [2, 3]
     assert saved["ui"]["workspace_root"] == os.path.normpath(r"C:\datasets\anime\project")
     assert export_path == str(output_path)
+
+
+def test_global_configuration_is_loaded_with_stages_and_settings_at_startup(tmp_path, monkeypatch):
+    path = tmp_path / "configs" / "ui" / "configuration.toml"
+    path.parent.mkdir(parents=True)
+    with path.open("w", encoding="utf-8") as handle:
+        ui.toml.dump(
+            {
+                "tag_threshold": 0.75,
+                "ui": {
+                    "enabled_stages": [2, 5],
+                    "workspace_root": r"C:\datasets\loaded",
+                },
+            },
+            handle,
+        )
+    monkeypatch.setattr(ui, "GLOBAL_CONFIG", path)
+
+    updates = ui.load_configuration(None)
+    tag_threshold_index = next(
+        index for index, action in enumerate(ui.ACTIONS) if action.dest == "tag_threshold"
+    )
+
+    assert updates[0]["value"] == r"C:\datasets\loaded"
+    assert updates[1]["value"] == ["2", "5"]
+    assert updates[tag_threshold_index + 2]["value"] == 0.75
+    assert "Global configuration loaded" in updates[-1]
 
 
 def test_running_from_form_creates_missing_workspace_folders(tmp_path, monkeypatch):

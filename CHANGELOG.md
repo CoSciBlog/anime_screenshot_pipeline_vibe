@@ -4,6 +4,7 @@
 
 - Fixed Stage 3 out-of-memory failures on very large crop collections by processing CCIP/OPTICS similarity data in configurable, memory-bounded chunks (`--classification_chunk_size`, default `4096`) while preserving global saved-output handling.
 - Replaced UI presets with one importable/exportable TOML configuration that stores enabled stages and stage settings together, and reduced the height of the import drop zone.
+- Made the TOML configuration a global auto-loaded UI setting file, removed the remaining profile-name field, and positioned server shutdown after the stage-settings area.
 - Renamed the user-facing Stage 2 label from **Crop** to **Detect** and added `detect` as its CLI alias while retaining `crop` compatibility.
 - Added the local Gradio Frame Lab interface on fixed port `7866`.
 - Added independently selectable pipeline stages, per-stage settings with help text, TOML configuration save/load, and a named configuration execution API.

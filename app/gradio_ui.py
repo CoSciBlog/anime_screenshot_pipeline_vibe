@@ -29,6 +29,7 @@ from anime2sd.parse_arguments import create_parser
 PORT = 7866
 CONFIG_DIR = ROOT / "configs" / "ui"
 SAVED_CONFIG_DIR = CONFIG_DIR / "saved"
+GLOBAL_CONFIG = CONFIG_DIR / "configuration.toml"
 RUNTIME_CONFIG = SAVED_CONFIG_DIR / "_last_run.toml"
 PIPELINE_PROCESS_LOCK = threading.Lock()
 PIPELINE_RUN_LOCK = threading.Lock()
@@ -776,45 +777,41 @@ def stage_tab_updates(selected: Iterable[Any] | None):
     return [gr.update(visible=number in enabled) for number in STAGES]
 
 
-def profile_path(name: str) -> Path:
-    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", name.strip()) or "pipeline_profile"
-    return SAVED_CONFIG_DIR / f"{cleaned}.toml"
-
-
 def save_configuration(
-    name: str,
     workspace_root: str,
     selected: list[str],
     *values: Any,
 ):
-    SAVED_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    GLOBAL_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     config = apply_workspace_paths(workspace_root, build_config(values, ACTIONS))
     config["ui"] = {
         "enabled_stages": stage_values(selected),
         "fixed_port": PORT,
         "workspace_root": normalize_path_value(workspace_root),
     }
-    path = profile_path(name)
-    with path.open("w", encoding="utf-8") as handle:
+    with GLOBAL_CONFIG.open("w", encoding="utf-8") as handle:
         toml.dump(config, handle)
-    relative_path = str(path.relative_to(ROOT)).replace("\\", "/")
+    relative_path = str(GLOBAL_CONFIG.relative_to(ROOT)).replace("\\", "/")
     return (
-        f"Configuration saved. Export is ready: `{relative_path}`",
-        str(path),
+        f"Global configuration saved. Export is ready: `{relative_path}`",
+        str(GLOBAL_CONFIG),
     )
 
 
-def load_configuration(uploaded_path: str | None):
+def load_configuration(uploaded_path: str | None = None):
     config = defaults()
     ui_config: dict[str, Any] = {}
-    path = Path(uploaded_path) if uploaded_path else None
+    path = Path(uploaded_path) if uploaded_path else GLOBAL_CONFIG
     if path and path.exists():
         loaded = flatten_toml(toml.load(path))
         ui_config = loaded.pop("ui", {}) if isinstance(loaded.get("ui"), dict) else {}
         config.update({key: clean_value(value) for key, value in loaded.items()})
-        status = f"Configuration loaded: {path.name}"
+        source = "Imported configuration" if uploaded_path else "Global configuration"
+        status = f"{source} loaded: `{path.name}`"
+    elif uploaded_path:
+        status = "Choose a valid TOML configuration file to import."
     else:
-        status = "Choose a TOML configuration file to import."
+        status = "No global configuration saved yet. Adjust settings and select Save configuration."
     selected = [str(stage) for stage in ui_config.get("enabled_stages", DEFAULT_ENABLED_STAGES)]
     workspace_root = ui_config.get("workspace_root", "")
     updates = [
@@ -1123,7 +1120,7 @@ def build_interface() -> gr.Blocks:
                             value="",
                             placeholder=r"C:\datasets\anime\my_project",
                             info=(
-                                "Optional single working root. When set, runs and saved profiles use "
+                                "Optional single working root. When set, runs and the global configuration use "
                                 "<root>\\src, <root>\\dst, <root>\\ref, and <root>\\logs."
                             ),
                         )
@@ -1143,16 +1140,17 @@ def build_interface() -> gr.Blocks:
                         elem_classes="compact-upload",
                     )
                     load_button = gr.Button("Load configuration")
-                    profile_name = gr.Textbox(
-                        label="Configuration name",
-                        value="my_pipeline",
-                        info="One TOML file stores stage selection, workspace paths, and all settings.",
+                    gr.Markdown(
+                        "One global TOML file stores stage selection, workspace paths, and all settings. "
+                        "It is restored automatically when the application starts."
                     )
                     with gr.Row():
                         save_button = gr.Button("Save configuration", variant="primary")
-                        export_button = gr.DownloadButton("Export settings")
+                        export_button = gr.DownloadButton(
+                            "Export settings",
+                            value=str(GLOBAL_CONFIG) if GLOBAL_CONFIG.exists() else None,
+                        )
             status = gr.Markdown(f"Web interface: `http://127.0.0.1:{PORT}` (fixed port).")
-            shutdown_button = gr.Button("Shut down server", variant="stop", elem_classes="shutdown-button")
 
         gr.HTML("<p class='settings-label'>Settings by stage</p>")
         with gr.Tabs(elem_classes="settings-tabs"):
@@ -1178,6 +1176,8 @@ def build_interface() -> gr.Blocks:
                             with gr.Row():
                                 for action in remaining[offset:offset + 3]:
                                     controls.append(make_component(action, initial.get(action.dest)))
+
+        shutdown_button = gr.Button("Shut down server", variant="stop", elem_classes="shutdown-button")
 
         ordered_controls = {action.dest: control for action, control in zip(
             [item for group in FIELD_GROUPS.values() for item in ACTIONS if item.dest in group] + remaining,
@@ -1206,7 +1206,7 @@ def build_interface() -> gr.Blocks:
 
         save_button.click(
             save_configuration,
-            inputs=[profile_name, workspace_root, stage_selector, *controls_in_action_order],
+            inputs=[workspace_root, stage_selector, *controls_in_action_order],
             outputs=[status, export_button],
             api_name="save_configuration",
         )
@@ -1214,6 +1214,11 @@ def build_interface() -> gr.Blocks:
             load_configuration,
             inputs=uploaded,
             outputs=[workspace_root, stage_selector, *controls_in_action_order, status],
+        ).then(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
+        demo.load(
+            load_configuration,
+            outputs=[workspace_root, stage_selector, *controls_in_action_order, status],
+            api_name="load_global_configuration",
         ).then(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
         stage_selector.change(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
         run_event = run_button.click(
@@ -1238,7 +1243,7 @@ def build_interface() -> gr.Blocks:
             api_name="shutdown_server",
             concurrency_limit=None,
         )
-        api_profile = gr.Textbox(value="configs/ui/saved/my_pipeline.toml", visible=False, container=False)
+        api_profile = gr.Textbox(value="configs/ui/configuration.toml", visible=False, container=False)
         api_stages = gr.Textbox(value="", visible=False, container=False)
         api_output = gr.Textbox(visible=False, container=False)
         api_button = gr.Button(visible=False)

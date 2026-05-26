@@ -221,11 +221,15 @@ def test_global_configuration_is_loaded_with_stages_and_settings_at_startup(tmp_
     classification_chunk_size_index = next(
         index for index, action in enumerate(ui.ACTIONS) if action.dest == "classification_chunk_size"
     )
+    min_download_episode_index = next(
+        index for index, action in enumerate(ui.ACTIONS) if action.dest == "min_download_episode"
+    )
 
     assert updates[0]["value"] == r"C:\datasets\loaded"
     assert updates[1]["value"] == ["2", "5"]
     assert updates[tag_threshold_index + 2]["value"] == 0.75
     assert updates[classification_chunk_size_index + 2]["value"] == 1024
+    assert updates[min_download_episode_index + 2]["value"] is None
     assert "Global configuration loaded" in updates[-1]
 
 

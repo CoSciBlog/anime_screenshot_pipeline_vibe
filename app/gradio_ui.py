@@ -530,8 +530,8 @@ def display_value(action: argparse.Action, value: Any) -> Any:
 
 def component_value(action: argparse.Action, value: Any) -> Any:
     shown = display_value(action, value)
-    if action.type in (int, float) and shown != "":
-        return action.type(shown)
+    if action.type in (int, float):
+        return None if shown == "" else action.type(shown)
     return None if action.choices and shown == "" else shown
 
 

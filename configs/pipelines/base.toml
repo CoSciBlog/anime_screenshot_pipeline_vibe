@@ -75,6 +75,8 @@ max_images_per_character = 0
 max_images_per_character_per_episode = 0
 # Remove generated JSON/NPY auxiliary files from classified output after selected stages no longer need them
 remove_classified_aux_files = false
+# Remove generated Stage 2 cropped intermediate data after Stage 3 succeeds
+remove_stage2_crops_after_classification = false
 # Whether to disable matching character labels for noise images
 no_extract_from_noise = false
 # Whether to disable final filtering for character consistency

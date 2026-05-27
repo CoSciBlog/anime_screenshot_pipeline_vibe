@@ -67,6 +67,8 @@ max_images_per_character = 0
 max_images_per_character_per_episode = 0
 # Remove generated JSON/NPY classified helper files after dependent stages complete
 remove_classified_aux_files = false
+# Remove generated Stage 2 cropped intermediate data after Stage 3 succeeds
+remove_stage2_crops_after_classification = false
 # Whether to ignore existing character metadata during classification
 ignore_character_metadata = false
 # Minimum cluster samples in character clustering

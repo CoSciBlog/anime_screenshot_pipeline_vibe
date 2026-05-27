@@ -5,7 +5,8 @@ import sys
 import app.gradio_ui as ui
 
 
-def test_interface_exposes_control_endpoints_and_stage_tabs():
+def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "GLOBAL_CONFIG", tmp_path / "missing.toml")
     config = ui.build_interface().get_config_file()
     components = " ".join(str(component.get("props", {})) for component in config["components"])
     dependencies = " ".join(str(dependency) for dependency in config["dependencies"])
@@ -33,6 +34,7 @@ def test_interface_exposes_control_endpoints_and_stage_tabs():
     assert "--max_images_per_character" in components
     assert "--max_images_per_character_per_episode" in components
     assert "--remove_classified_aux_files" in components
+    assert "--remove_stage2_crops_after_classification" in components
     assert "--classification_chunk_size" in components
     assert "create_workspace" in dependencies
     assert "clear_workspace_output" in dependencies
@@ -231,6 +233,50 @@ def test_global_configuration_is_loaded_with_stages_and_settings_at_startup(tmp_
     assert updates[classification_chunk_size_index + 2]["value"] == 1024
     assert updates[min_download_episode_index + 2]["value"] is None
     assert "Global configuration loaded" in updates[-1]
+
+
+def test_initial_interface_uses_global_configuration_without_page_load_callback(tmp_path, monkeypatch):
+    path = tmp_path / "configs" / "ui" / "configuration.toml"
+    path.parent.mkdir(parents=True)
+    with path.open("w", encoding="utf-8") as handle:
+        ui.toml.dump(
+            {
+                "tag_threshold": "0.81",
+                "ui": {
+                    "enabled_stages": [2, 5],
+                    "workspace_root": r"C:\datasets\loaded",
+                },
+            },
+            handle,
+        )
+    monkeypatch.setattr(ui, "GLOBAL_CONFIG", path)
+
+    config = ui.build_interface().get_config_file()
+    props = [
+        component.get("props", {})
+        for component in config["components"]
+    ]
+    stage_selector = next(item for item in props if item.get("label") == "Stages to run")
+    workspace_root = next(item for item in props if item.get("label") == "Workspace root")
+    tag_threshold = next(item for item in props if item.get("label") == "--tag_threshold")
+    stage_two = next(item for item in props if item.get("label") == "Stage 2 - Detect")
+    stage_three = next(item for item in props if item.get("label") == "Stage 3 - Classify")
+    load_global = next(
+        dependency for dependency in config["dependencies"]
+        if dependency.get("api_name") == "load_global_configuration"
+    )
+
+    assert stage_selector["value"] == ["2", "5"]
+    assert workspace_root["value"] == r"C:\datasets\loaded"
+    assert tag_threshold["value"] == 0.81
+    assert stage_two["visible"] is True
+    assert stage_three["visible"] is False
+    assert all(target[1] != "load" for target in load_global["targets"])
+    assert not any(
+        target[1] == "load"
+        for dependency in config["dependencies"]
+        for target in dependency.get("targets", [])
+    )
 
 
 def test_running_from_form_creates_missing_workspace_folders(tmp_path, monkeypatch):

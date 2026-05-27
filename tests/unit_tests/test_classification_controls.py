@@ -10,7 +10,10 @@ from anime2sd.classif.file_utils import (
     limit_recognized_character_images,
     save_to_dir,
 )
-from automatic_pipeline import cleanup_classified_aux_files
+from automatic_pipeline import (
+    cleanup_classified_aux_files,
+    cleanup_stage2_crops_after_classification,
+)
 
 classification = importlib.import_module("anime2sd.classif.classify_characters")
 
@@ -66,6 +69,32 @@ def test_cleanup_classified_aux_files_keeps_images(tmp_path):
     assert (output / "keep.png").exists()
     assert not (metadata / "remove_meta.json").exists()
     assert not (metadata / "remove_ccip.npy").exists()
+
+
+def test_cleanup_stage2_crops_removes_only_generated_classification_input(tmp_path):
+    generated_crops = tmp_path / "dst" / "intermediate" / "screenshots" / "cropped"
+    generated_crops.mkdir(parents=True)
+    (generated_crops / "crop.png").write_text("crop", encoding="utf-8")
+    source_crops = tmp_path / "user_input"
+    source_crops.mkdir()
+    (source_crops / "keep.png").write_text("source", encoding="utf-8")
+    args = type(
+        "Args",
+        (),
+        {
+            "dst_dir": str(tmp_path / "dst"),
+            "extra_path_component": "",
+            "image_type": "screenshots",
+        },
+    )()
+
+    cleanup_stage2_crops_after_classification(args, str(source_crops), logging.getLogger())
+    assert generated_crops.exists()
+    assert (source_crops / "keep.png").exists()
+
+    cleanup_stage2_crops_after_classification(args, str(generated_crops), logging.getLogger())
+    assert not generated_crops.exists()
+    assert (source_crops / "keep.png").exists()
 
 
 def test_classified_output_stores_json_and_npy_in_metadata_subfolder(tmp_path):

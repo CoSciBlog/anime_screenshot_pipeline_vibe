@@ -303,6 +303,8 @@ def classify_characters(args, stage, logger):
     )
     if args.remove_classified_aux_files and args.end_stage < 4:
         cleanup_classified_aux_files(dst_dir, logger)
+    if args.remove_stage2_crops_after_classification:
+        cleanup_stage2_crops_after_classification(args, src_dir, logger)
 
 
 def cleanup_classified_aux_files(classified_dir, logger):
@@ -315,6 +317,22 @@ def cleanup_classified_aux_files(classified_dir, logger):
                     os.remove(os.path.join(root, filename))
                     removed += 1
     logger.info(f"Removed {removed} JSON/NPY auxiliary file(s) from {classified_dir}.")
+
+
+def cleanup_stage2_crops_after_classification(args, classified_source_dir, logger):
+    """Remove generated Stage 2 crops only when Stage 3 consumed that exact directory."""
+    generated_crop_dir = get_and_create_dst_dir(args, "intermediate", "cropped")
+    if os.path.abspath(classified_source_dir) != os.path.abspath(generated_crop_dir):
+        logger.info(
+            "Skipped Stage 2 crop cleanup because Stage 3 input is not the generated "
+            f"crop directory: {classified_source_dir}."
+        )
+        return
+    if os.path.isdir(generated_crop_dir):
+        shutil.rmtree(generated_crop_dir)
+        logger.info(f"Removed generated Stage 2 cropped data from {generated_crop_dir}.")
+    else:
+        logger.info(f"No generated Stage 2 cropped data to remove at {generated_crop_dir}.")
 
 
 def select_dataset_images(args, stage, logger):

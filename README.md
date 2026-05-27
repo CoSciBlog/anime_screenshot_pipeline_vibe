@@ -82,6 +82,7 @@ Stage 3 also provides dataset-balance and storage controls:
 - `--max_images_per_character` limits the total saved matched images for each recognized reference character.
 - `--max_images_per_character_per_episode` limits repeated images for one character within an inferred episode. Episodes are detected from `S01E01`-style file or folder names; otherwise the immediate source folder is used.
 - `--remove_classified_aux_files` removes generated `.json` metadata and `.npy` CCIP feature cache files from the classified output only after dependent selected stages have consumed them. Leave it disabled when resuming later from classified intermediate output.
+- `--remove_stage2_crops_after_classification` removes the generated Stage 2 cropped intermediate directory after Stage 3 has successfully classified it. It skips cleanup when Stage 3 is run from a user-provided input directory.
 
 ### Preprocessing Messages
 

@@ -61,6 +61,8 @@ max_images_per_character = 0
 max_images_per_character_per_episode = 0
 # Remove generated JSON/NPY classified helper files after dependent stages complete
 remove_classified_aux_files = false
+# Remove generated Stage 2 cropped intermediate data after Stage 3 succeeds
+remove_stage2_crops_after_classification = false
 # Whether to keep unnamed clusters when reference images are provided or when characters are available in metadata
 keep_unnamed_clusters = false
 

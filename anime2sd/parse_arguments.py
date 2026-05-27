@@ -383,6 +383,14 @@ def create_parser():
         ),
     )
     parser.add_argument(
+        "--remove_stage2_crops_after_classification",
+        action="store_true",
+        help=(
+            "Remove the generated Stage 2 cropped intermediate directory after "
+            "Stage 3 classification succeeds. User-provided Stage 3 input is kept."
+        ),
+    )
+    parser.add_argument(
         "--ignore_character_metadata",
         action="store_true",
         help=(

@@ -124,6 +124,7 @@ FIELD_GROUPS = OrderedDict(
                 "max_images_per_character",
                 "max_images_per_character_per_episode",
                 "remove_classified_aux_files",
+                "remove_stage2_crops_after_classification",
                 "ignore_character_metadata",
                 "no_extract_from_noise",
                 "no_filter_characters",
@@ -260,6 +261,10 @@ FIELD_GUIDANCE = {
     "max_images_per_character": "Caps recognized samples per reference character; reduces imbalance and storage at the cost of pose variety.",
     "max_images_per_character_per_episode": "Caps repeated episode-specific matches per character to reduce near-duplicate dominance.",
     "remove_classified_aux_files": "Saves disk space after classification output is consumed, but prevents later reuse of cached features and metadata.",
+    "remove_stage2_crops_after_classification": (
+        "Saves disk space after successful classification by removing generated Stage 2 crops. "
+        "User-provided Stage 3 input is never deleted."
+    ),
     "no_filter_characters": "Disabling consistency filtering retains more samples at higher label-noise risk.",
     "keep_unnamed_clusters": "Keeps unmatched material for coverage, but it does not gain reference labels.",
     "cluster_merge_threshold": "Controls cluster joining; permissive matching risks merging different characters.",
@@ -800,7 +805,7 @@ def save_configuration(
     )
 
 
-def load_configuration(uploaded_path: str | None = None):
+def configuration_state(uploaded_path: str | None = None):
     config = defaults()
     ui_config: dict[str, Any] = {}
     path = Path(uploaded_path) if uploaded_path else GLOBAL_CONFIG
@@ -816,6 +821,11 @@ def load_configuration(uploaded_path: str | None = None):
         status = "No global configuration saved yet. Adjust settings and select Save configuration."
     selected = [str(stage) for stage in ui_config.get("enabled_stages", DEFAULT_ENABLED_STAGES)]
     workspace_root = ui_config.get("workspace_root", "")
+    return config, selected, workspace_root, status
+
+
+def load_configuration(uploaded_path: str | None = None):
+    config, selected, workspace_root, status = configuration_state(uploaded_path)
     updates = [
         gr.update(value=workspace_root),
         gr.update(value=selected),
@@ -1073,7 +1083,7 @@ def make_component(action: argparse.Action, value: Any):
 
 
 def build_interface() -> gr.Blocks:
-    initial = defaults()
+    initial, initial_stages, initial_workspace_root, initial_status = configuration_state()
     controls: list[Any] = []
     stage_tabs: list[Any] = []
     grouped = {name: set(keys) for name, keys in FIELD_GROUPS.items()}
@@ -1087,7 +1097,7 @@ def build_interface() -> gr.Blocks:
             gr.HTML("<p class='panel-label'>Workflow</p>")
             stage_selector = gr.CheckboxGroup(
                 choices=[(f"{number} - {details[0]}", str(number)) for number, details in STAGES.items()],
-                value=DEFAULT_ENABLED_STAGES,
+                value=initial_stages,
                 label="Stages to run",
                 info="Only enabled stages are run and shown in Settings below. Stage 3 uses character references.",
             )
@@ -1107,7 +1117,7 @@ def build_interface() -> gr.Blocks:
                 status_markup("Ready", "Select stages and run the pipeline.")
             )
             stage_progress = gr.HTML(
-                progress_markup(stage_values(DEFAULT_ENABLED_STAGES), set(), None)
+                progress_markup(stage_values(initial_stages), set(), None)
             )
             output = gr.Textbox(
                 label="Run log", lines=18, interactive=False, elem_classes="run-log"
@@ -1119,7 +1129,7 @@ def build_interface() -> gr.Blocks:
                     with gr.Column(elem_classes="workspace-card"):
                         workspace_root = gr.Textbox(
                             label="Workspace root",
-                            value="",
+                            value=initial_workspace_root,
                             placeholder=r"C:\datasets\anime\my_project",
                             info=(
                                 "Optional single working root. When set, runs and the global configuration use "
@@ -1152,13 +1162,15 @@ def build_interface() -> gr.Blocks:
                             "Export settings",
                             value=str(GLOBAL_CONFIG) if GLOBAL_CONFIG.exists() else None,
                         )
-            status = gr.Markdown(f"Web interface: `http://127.0.0.1:{PORT}` (fixed port).")
+            status = gr.Markdown(
+                f"Web interface: `http://127.0.0.1:{PORT}` (fixed port).\n\n{initial_status}"
+            )
 
         gr.HTML("<p class='settings-label'>Settings by stage</p>")
         with gr.Tabs(elem_classes="settings-tabs"):
             for group_name, fields in FIELD_GROUPS.items():
                 stage_number = GROUP_STAGES.get(group_name)
-                visible = stage_number is None or str(stage_number) in DEFAULT_ENABLED_STAGES
+                visible = stage_number is None or str(stage_number) in initial_stages
                 with gr.Tab(group_name, visible=visible) as tab:
                     if stage_number is not None:
                         stage_tabs.append(tab)
@@ -1217,7 +1229,8 @@ def build_interface() -> gr.Blocks:
             inputs=uploaded,
             outputs=[workspace_root, stage_selector, *controls_in_action_order, status],
         ).then(stage_tab_updates, inputs=stage_selector, outputs=stage_tabs)
-        demo.load(
+        api_load_button = gr.Button(visible=False)
+        api_load_button.click(
             load_configuration,
             outputs=[workspace_root, stage_selector, *controls_in_action_order, status],
             api_name="load_global_configuration",

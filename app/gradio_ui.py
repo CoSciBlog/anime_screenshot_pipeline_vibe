@@ -469,8 +469,21 @@ STYLE = """
   background: var(--accent);
   border-color: var(--accent);
 }
+.settings-save-button {
+  margin-top: .85rem;
+}
 .shutdown-button {
-  margin-top: .8rem;
+  margin-top: .55rem;
+}
+.shutdown-confirmation {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: .55rem;
+  margin-top: .6rem;
+  padding: .75rem .85rem;
+}
+.shutdown-confirmation .prose {
+  margin-bottom: .6rem;
 }
 .gradio-container a { color: var(--accent); }
 """
@@ -875,6 +888,14 @@ def shutdown_server() -> str:
     return "Server shutdown requested. This browser connection will close shortly."
 
 
+def show_shutdown_confirmation():
+    return gr.update(visible=True)
+
+
+def hide_shutdown_confirmation():
+    return gr.update(visible=False)
+
+
 def execute_config(stages: list[int], config: dict[str, Any]):
     global ACTIVE_PIPELINE_PROCESS
     completed: set[int] = set()
@@ -1191,7 +1212,20 @@ def build_interface() -> gr.Blocks:
                                 for action in remaining[offset:offset + 3]:
                                     controls.append(make_component(action, initial.get(action.dest)))
 
+        save_settings_button = gr.Button(
+            "Save configuration",
+            variant="primary",
+            elem_classes="settings-save-button",
+        )
         shutdown_button = gr.Button("Shut down server", variant="stop", elem_classes="shutdown-button")
+        with gr.Column(visible=False, elem_classes="shutdown-confirmation") as shutdown_confirmation:
+            gr.Markdown(
+                "**Shut down the server?** This stops an active pipeline and closes "
+                "the Frame Lab web interface."
+            )
+            with gr.Row():
+                cancel_shutdown_button = gr.Button("Cancel")
+                confirm_shutdown_button = gr.Button("Yes, shut down server", variant="stop")
 
         ordered_controls = {action.dest: control for action, control in zip(
             [item for group in FIELD_GROUPS.values() for item in ACTIONS if item.dest in group] + remaining,
@@ -1224,6 +1258,11 @@ def build_interface() -> gr.Blocks:
             outputs=[status, export_button],
             api_name="save_configuration",
         )
+        save_settings_button.click(
+            save_configuration,
+            inputs=[workspace_root, stage_selector, *controls_in_action_order],
+            outputs=[status, export_button],
+        )
         load_button.click(
             load_configuration,
             inputs=uploaded,
@@ -1253,6 +1292,14 @@ def build_interface() -> gr.Blocks:
             concurrency_id="pipeline_control",
         )
         shutdown_button.click(
+            show_shutdown_confirmation,
+            outputs=shutdown_confirmation,
+        )
+        cancel_shutdown_button.click(
+            hide_shutdown_confirmation,
+            outputs=shutdown_confirmation,
+        )
+        confirm_shutdown_button.click(
             shutdown_server,
             outputs=status,
             api_name="shutdown_server",

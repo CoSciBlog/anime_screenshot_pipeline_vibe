@@ -18,6 +18,8 @@ def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatc
 
     assert "Stop pipeline" in components
     assert "Shut down server" in components
+    assert "Yes, shut down server" in components
+    assert "Shut down the server?" in components
     assert "Workspace root" in components
     assert "Create workspace folders" in components
     assert "Clear generated output" in components
@@ -54,13 +56,31 @@ def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatc
     assert tab_props["Stage 3 - Classify"]["visible"] is True
     shutdown_index = next(
         index for index, component in enumerate(config["components"])
-        if "Shut down server" in str(component.get("props", {}))
+        if component.get("type") == "button"
+        and component.get("props", {}).get("value") == "Shut down server"
+    )
+    save_indices = [
+        index for index, component in enumerate(config["components"])
+        if component.get("type") == "button"
+        and component.get("props", {}).get("value") == "Save configuration"
+    ]
+    confirm_shutdown_id = next(
+        component["id"] for component in config["components"]
+        if component.get("type") == "button"
+        and component.get("props", {}).get("value") == "Yes, shut down server"
+    )
+    shutdown_dependency = next(
+        dependency for dependency in config["dependencies"]
+        if dependency.get("api_name") == "shutdown_server"
     )
     last_stage_tab_index = max(
         index for index, component in enumerate(config["components"])
         if component.get("type") == "tabitem"
     )
+    assert len(save_indices) == 2
+    assert max(save_indices) > last_stage_tab_index
     assert shutdown_index > last_stage_tab_index
+    assert shutdown_dependency["targets"][0][0] == confirm_shutdown_id
 
 
 def test_stage_settings_visibility_follows_enabled_stages():
@@ -335,3 +355,8 @@ def test_shutdown_server_requests_pipeline_stop_and_process_exit(monkeypatch):
 
     assert ui.shutdown_server().startswith("Server shutdown requested.")
     assert calls == ["stop", 0]
+
+
+def test_shutdown_confirmation_visibility_updates():
+    assert ui.show_shutdown_confirmation()["visible"] is True
+    assert ui.hide_shutdown_confirmation()["visible"] is False

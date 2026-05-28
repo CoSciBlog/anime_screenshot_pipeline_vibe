@@ -391,6 +391,14 @@ def create_parser():
         ),
     )
     parser.add_argument(
+        "--remove_noise_folder_after_classification",
+        action="store_true",
+        help=(
+            "Remove the classified 0_noise/0_noisy folder after Stage 3 "
+            "classification succeeds."
+        ),
+    )
+    parser.add_argument(
         "--ignore_character_metadata",
         action="store_true",
         help=(

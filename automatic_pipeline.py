@@ -305,6 +305,8 @@ def classify_characters(args, stage, logger):
         cleanup_classified_aux_files(dst_dir, logger)
     if args.remove_stage2_crops_after_classification:
         cleanup_stage2_crops_after_classification(args, src_dir, logger)
+    if args.remove_noise_folder_after_classification:
+        cleanup_noise_folder_after_classification(dst_dir, logger)
 
 
 def cleanup_classified_aux_files(classified_dir, logger):
@@ -333,6 +335,24 @@ def cleanup_stage2_crops_after_classification(args, classified_source_dir, logge
         logger.info(f"Removed generated Stage 2 cropped data from {generated_crop_dir}.")
     else:
         logger.info(f"No generated Stage 2 cropped data to remove at {generated_crop_dir}.")
+
+
+def cleanup_noise_folder_after_classification(classified_dir, logger):
+    """Remove classified noise folders after Stage 3 when requested."""
+    removed = []
+    for folder_name in ("0_noise", "0_noisy"):
+        folder_path = os.path.join(classified_dir, folder_name)
+        if os.path.isdir(folder_path):
+            shutil.rmtree(folder_path)
+            removed.append(folder_path)
+    if removed:
+        logger.info(
+            "Removed classified noise folder(s): "
+            + ", ".join(removed)
+            + "."
+        )
+    else:
+        logger.info(f"No classified 0_noise/0_noisy folder to remove at {classified_dir}.")
 
 
 def select_dataset_images(args, stage, logger):

@@ -37,6 +37,7 @@ def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatc
     assert "--max_images_per_character_per_episode" in components
     assert "--remove_classified_aux_files" in components
     assert "--remove_stage2_crops_after_classification" in components
+    assert "--remove_noise_folder_after_classification" in components
     assert "--classification_chunk_size" in components
     assert "create_workspace" in dependencies
     assert "clear_workspace_output" in dependencies
@@ -217,6 +218,31 @@ def test_global_configuration_records_stages_and_exports_same_file(tmp_path, mon
     assert saved["ui"]["enabled_stages"] == [2, 3]
     assert saved["ui"]["workspace_root"] == os.path.normpath(r"C:\datasets\anime\project")
     assert export_path == str(output_path)
+
+
+def test_global_configuration_records_stage_three_cleanup_toggles(tmp_path, monkeypatch):
+    values = [
+        ui.component_value(action, ui.defaults().get(action.dest))
+        for action in ui.ACTIONS
+    ]
+    stage2_cleanup_index = next(
+        index for index, action in enumerate(ui.ACTIONS)
+        if action.dest == "remove_stage2_crops_after_classification"
+    )
+    noise_cleanup_index = next(
+        index for index, action in enumerate(ui.ACTIONS)
+        if action.dest == "remove_noise_folder_after_classification"
+    )
+    values[stage2_cleanup_index] = True
+    values[noise_cleanup_index] = True
+    monkeypatch.setattr(ui, "ROOT", tmp_path)
+    monkeypatch.setattr(ui, "GLOBAL_CONFIG", tmp_path / "configs" / "ui" / "configuration.toml")
+
+    ui.save_configuration("", ["3"], *values)
+    saved = ui.toml.load(ui.GLOBAL_CONFIG)
+
+    assert saved["remove_stage2_crops_after_classification"] is True
+    assert saved["remove_noise_folder_after_classification"] is True
 
 
 def test_global_configuration_is_loaded_with_stages_and_settings_at_startup(tmp_path, monkeypatch):

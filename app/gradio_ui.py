@@ -125,6 +125,7 @@ FIELD_GROUPS = OrderedDict(
                 "max_images_per_character_per_episode",
                 "remove_classified_aux_files",
                 "remove_stage2_crops_after_classification",
+                "remove_noise_folder_after_classification",
                 "ignore_character_metadata",
                 "no_extract_from_noise",
                 "no_filter_characters",
@@ -264,6 +265,10 @@ FIELD_GUIDANCE = {
     "remove_stage2_crops_after_classification": (
         "Saves disk space after successful classification by removing generated Stage 2 crops. "
         "User-provided Stage 3 input is never deleted."
+    ),
+    "remove_noise_folder_after_classification": (
+        "Saves disk space by deleting classified noise output after Stage 3 completes. "
+        "Use only when you do not need the rejected/noise crops for review or later stages."
     ),
     "no_filter_characters": "Disabling consistency filtering retains more samples at higher label-noise risk.",
     "keep_unnamed_clusters": "Keeps unmatched material for coverage, but it does not gain reference labels.",

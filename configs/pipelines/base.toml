@@ -77,6 +77,8 @@ max_images_per_character_per_episode = 0
 remove_classified_aux_files = false
 # Remove generated Stage 2 cropped intermediate data after Stage 3 succeeds
 remove_stage2_crops_after_classification = false
+# Remove classified 0_noise/0_noisy output after Stage 3 succeeds
+remove_noise_folder_after_classification = false
 # Whether to disable matching character labels for noise images
 no_extract_from_noise = false
 # Whether to disable final filtering for character consistency

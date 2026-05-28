@@ -12,6 +12,7 @@ from anime2sd.classif.file_utils import (
 )
 from automatic_pipeline import (
     cleanup_classified_aux_files,
+    cleanup_noise_folder_after_classification,
     cleanup_stage2_crops_after_classification,
 )
 
@@ -95,6 +96,20 @@ def test_cleanup_stage2_crops_removes_only_generated_classification_input(tmp_pa
     cleanup_stage2_crops_after_classification(args, str(generated_crops), logging.getLogger())
     assert not generated_crops.exists()
     assert (source_crops / "keep.png").exists()
+
+
+def test_cleanup_noise_folder_after_classification_removes_noise_aliases_only(tmp_path):
+    classified = tmp_path / "classified"
+    for folder_name in ("0_noise", "0_noisy", "frieren"):
+        folder = classified / folder_name
+        folder.mkdir(parents=True)
+        (folder / "image.png").write_text("image", encoding="utf-8")
+
+    cleanup_noise_folder_after_classification(str(classified), logging.getLogger())
+
+    assert not (classified / "0_noise").exists()
+    assert not (classified / "0_noisy").exists()
+    assert (classified / "frieren" / "image.png").exists()
 
 
 def test_classified_output_stores_json_and_npy_in_metadata_subfolder(tmp_path):

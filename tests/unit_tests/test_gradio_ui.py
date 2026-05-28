@@ -25,6 +25,7 @@ def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatc
     assert "Clear generated output" in components
     assert "Save configuration" in components
     assert "Export settings" in components
+    assert "Language" in components
     assert "Starting preset" not in components
     assert "Configuration name" not in components
     assert "Import configuration" in components
@@ -273,12 +274,35 @@ def test_global_configuration_is_loaded_with_stages_and_settings_at_startup(tmp_
         index for index, action in enumerate(ui.ACTIONS) if action.dest == "min_download_episode"
     )
 
-    assert updates[0]["value"] == r"C:\datasets\loaded"
-    assert updates[1]["value"] == ["2", "5"]
-    assert updates[tag_threshold_index + 2]["value"] == 0.75
-    assert updates[classification_chunk_size_index + 2]["value"] == 1024
-    assert updates[min_download_episode_index + 2]["value"] is None
+    assert updates[0]["value"] == "en"
+    assert updates[1]["value"] == r"C:\datasets\loaded"
+    assert updates[2]["value"] == ["2", "5"]
+    assert updates[tag_threshold_index + 3]["value"] == 0.75
+    assert updates[classification_chunk_size_index + 3]["value"] == 1024
+    assert updates[min_download_episode_index + 3]["value"] is None
     assert "Global configuration loaded" in updates[-1]
+
+
+def test_language_selection_is_saved_loaded_and_updates_interface(tmp_path, monkeypatch):
+    values = [
+        ui.component_value(action, ui.defaults().get(action.dest))
+        for action in ui.ACTIONS
+    ]
+    monkeypatch.setattr(ui, "ROOT", tmp_path)
+    monkeypatch.setattr(ui, "GLOBAL_CONFIG", tmp_path / "configs" / "ui" / "configuration.toml")
+
+    ui.save_configuration("de", "", ["2", "3"], *values)
+    saved = ui.toml.load(ui.GLOBAL_CONFIG)
+    updates = ui.load_configuration(None)
+    language_updates = ui.interface_language_updates("de", ["2", "3"])
+
+    assert saved["ui"]["language"] == "de"
+    assert updates[0]["value"] == "de"
+    assert updates[2]["choices"][2][0] == "2 - Erkennen"
+    assert "Globale Konfiguration geladen" in updates[-1]
+    assert language_updates[1]["label"] == "Auszuführende Stages"
+    assert language_updates[1]["choices"][3][0] == "3 - Klassifizieren"
+    assert "Einstellungen nach Stage" in language_updates[19]["value"]
 
 
 def test_initial_interface_uses_global_configuration_without_page_load_callback(tmp_path, monkeypatch):
@@ -323,6 +347,36 @@ def test_initial_interface_uses_global_configuration_without_page_load_callback(
         for dependency in config["dependencies"]
         for target in dependency.get("targets", [])
     )
+
+
+def test_initial_interface_uses_saved_german_language(tmp_path, monkeypatch):
+    path = tmp_path / "configs" / "ui" / "configuration.toml"
+    path.parent.mkdir(parents=True)
+    with path.open("w", encoding="utf-8") as handle:
+        ui.toml.dump(
+            {
+                "ui": {
+                    "enabled_stages": [2, 3],
+                    "language": "de",
+                    "workspace_root": "",
+                },
+            },
+            handle,
+        )
+    monkeypatch.setattr(ui, "GLOBAL_CONFIG", path)
+
+    config = ui.build_interface().get_config_file()
+    components = " ".join(str(component.get("props", {})) for component in config["components"])
+    props = [
+        component.get("props", {})
+        for component in config["components"]
+    ]
+    stage_selector = next(item for item in props if item.get("label") == "Auszuführende Stages")
+
+    assert "Sprache" in components
+    assert "Einstellungen nach Stage" in components
+    assert "Stage 2 - Erkennen" in components
+    assert stage_selector["value"] == ["2", "3"]
 
 
 def test_running_from_form_creates_missing_workspace_folders(tmp_path, monkeypatch):

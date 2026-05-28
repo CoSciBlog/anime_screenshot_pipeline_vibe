@@ -3,6 +3,7 @@
 ## Unreleased - 2026-05-25
 
 - Added an always-visible save action below stage settings and an in-page confirmation step before shutting down the UI server.
+- Added English/German UI language selection for the Gradio interface, including localized stage names, page descriptions, and expanded setting explanations stored in the global configuration.
 - Added a Stage 3 cleanup option to delete classified `0_noise`/`0_noisy` output after successful classification, and covered Stage 3 cleanup toggles in saved UI configuration.
 - Added a Stage 3 setting to remove generated Stage 2 crop intermediates after successful classification while preserving directly supplied Stage 3 inputs.
 - Fixed Stage 3 out-of-memory failures on very large crop collections by processing CCIP/OPTICS similarity data in configurable, memory-bounded chunks (`--classification_chunk_size`, default `4096`) while preserving global saved-output handling.

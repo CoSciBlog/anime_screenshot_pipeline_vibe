@@ -18,6 +18,7 @@ The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local 
 - Each control displays the original argument description as inline help text, with concise quality, matching, or performance guidance where the setting affects results.
 - Stages are selected independently. Stages 1 (frame extraction) and 2 (character detection and crop generation) are optional; stages 3 through 7 can each be enabled or omitted with checkboxes. Stage 0 is available when downloading source material is desired.
 - The UI uses one global TOML configuration file at `configs/ui/configuration.toml`. **Save configuration**, available in Configuration and below **Settings by stage**, stores stage selection, workspace root, and every setting together; the file is loaded automatically at application start and **Export settings** downloads it. Use **Import configuration** to load values from another TOML file before saving them globally. Presets are not used in the UI. The global configuration is intentionally ignored by Git because it commonly contains local paths.
+- The Gradio settings include a UI language selector. English and German are supported for stage names, setting labels, inline help, page descriptions, status text, and saved configuration values, so the interface can be reopened in the last selected language.
 - A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder. Missing `src`, `ref`, and `logs` folders are created automatically on run or with **Create workspace folders**; `dst` stage folders are created only when output is produced. Existing workspace contents are preserved; a separate **Clear generated output** action removes only generated `dst` contents.
 - Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a configuration is saved or a run starts.
 - Consecutive selected stages are executed as one pipeline segment through `automatic_pipeline.py`, so generated output flows into the next selected stage correctly.
@@ -83,6 +84,7 @@ Stage 3 also provides dataset-balance and storage controls:
 - `--max_images_per_character_per_episode` limits repeated images for one character within an inferred episode. Episodes are detected from `S01E01`-style file or folder names; otherwise the immediate source folder is used.
 - `--remove_classified_aux_files` removes generated `.json` metadata and `.npy` CCIP feature cache files from the classified output only after dependent selected stages have consumed them. Leave it disabled when resuming later from classified intermediate output.
 - `--remove_stage2_crops_after_classification` removes the generated Stage 2 cropped intermediate directory after Stage 3 has successfully classified it. It skips cleanup when Stage 3 is run from a user-provided input directory.
+- `--remove_noise_folder_after_classification` removes classified noise output folders named `0_noise` or `0_noisy` after Stage 3 succeeds. This is useful when those rejected crops have already served their purpose and should not occupy disk space or be reviewed later.
 
 ### Preprocessing Messages
 
@@ -343,7 +345,8 @@ Contributions are welcome
 - The new workflow is largely inspired by the fully automatic procedure for single character of [narugo1992](https://github.com/narugo1992) and is largely based on the library [waifuc](https://github.com/deepghs/waifuc)
 - The [tag_filtering/overlap_tags.json](tag_filtering/overlap_tags.json) file is provided by gensen2ee
 - See the [old readme](scripts_v1/README.md) as well
-- The Gradio Frame Lab UI and Pinokio launcher additions are documented in [CREDITS.md](CREDITS.md).
+- The Gradio Frame Lab UI, Pinokio launcher additions, localized Gradio settings, Stage 3 cleanup controls, and documentation updates are documented in [CREDITS.md](CREDITS.md).
+- The changes in this repository were implemented with Codex.
 
 ## License
 

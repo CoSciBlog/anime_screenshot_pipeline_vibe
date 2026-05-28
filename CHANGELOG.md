@@ -2,6 +2,7 @@
 
 ## Unreleased - 2026-05-25
 
+- Updated README and credits to document the current Frame Lab localization, Stage 3 cleanup controls, and that the changes in this repository were implemented with Codex.
 - Added an always-visible save action below stage settings and an in-page confirmation step before shutting down the UI server.
 - Added English/German UI language selection for the Gradio interface, including localized stage names, page descriptions, and expanded setting explanations stored in the global configuration.
 - Added a Stage 3 cleanup option to delete classified `0_noise`/`0_noisy` output after successful classification, and covered Stage 3 cleanup toggles in saved UI configuration.

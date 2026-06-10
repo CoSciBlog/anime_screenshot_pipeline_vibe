@@ -356,18 +356,26 @@ def cleanup_noise_folder_after_classification(classified_dir, logger):
 
 
 def cleanup_source_files_after_pipeline(src_dir, logger):
-    """Remove files below the source directory while keeping folders in place."""
+    """Remove all generated source contents while keeping the source root."""
     if not os.path.isdir(src_dir):
-        logger.info(f"No source files removed because {src_dir} is not a directory.")
+        logger.info(f"No source contents removed because {src_dir} is not a directory.")
         return 0
 
-    removed = 0
-    for root, _dirs, files in os.walk(src_dir):
+    removed_files = 0
+    removed_dirs = 0
+    for root, dirs, files in os.walk(src_dir, topdown=False):
         for filename in files:
             os.remove(os.path.join(root, filename))
-            removed += 1
-    logger.info(f"Removed {removed} source file(s) from {src_dir}.")
-    return removed
+            removed_files += 1
+        for dirname in dirs:
+            directory = os.path.join(root, dirname)
+            shutil.rmtree(directory)
+            removed_dirs += 1
+    logger.info(
+        f"Removed {removed_files} source file(s) and "
+        f"{removed_dirs} source folder(s) from {src_dir}."
+    )
+    return removed_files
 
 
 def cleanup_metadata_after_pipeline(root_dir, logger, label):

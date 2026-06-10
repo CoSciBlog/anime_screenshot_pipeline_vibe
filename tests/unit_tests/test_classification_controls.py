@@ -114,20 +114,27 @@ def test_cleanup_noise_folder_after_classification_removes_noise_aliases_only(tm
     assert (classified / "frieren" / "image.png").exists()
 
 
-def test_cleanup_source_files_after_pipeline_keeps_folder_structure(tmp_path):
+def test_cleanup_source_files_after_pipeline_removes_source_contents(tmp_path):
     src = tmp_path / "src"
     nested = src / "nested"
+    metadata = nested / "metadata"
+    originals = src / "S01E01"
     nested.mkdir(parents=True)
+    metadata.mkdir()
+    originals.mkdir()
     (src / "video.mkv").write_text("source", encoding="utf-8")
     (nested / "frame.png").write_text("frame", encoding="utf-8")
+    (metadata / ".frame_meta.json").write_text("{}", encoding="utf-8")
+    (originals / "episode.mp4").write_text("video", encoding="utf-8")
 
     removed = cleanup_source_files_after_pipeline(str(src), logging.getLogger())
 
-    assert removed == 2
+    assert removed == 4
     assert src.is_dir()
-    assert nested.is_dir()
+    assert not nested.exists()
+    assert not metadata.exists()
+    assert not originals.exists()
     assert not (src / "video.mkv").exists()
-    assert not (nested / "frame.png").exists()
 
 
 def test_cleanup_metadata_after_pipeline_keeps_images_and_captions(tmp_path):

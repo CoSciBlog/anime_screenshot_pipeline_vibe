@@ -320,8 +320,8 @@ FIELD_GUIDANCE = {
         "Deletes classified 0_noise/0_noisy output after Stage 3. Use it only when rejected crops are not needed for review, debugging, or later reuse."
     ),
     "remove_src_files_after_pipeline": (
-        "Deletes files inside the configured source folder after the full pipeline finishes successfully. "
-        "Use only when the source media has already been copied, backed up, or no longer needs to be reused."
+        "Deletes files, metadata, and source media subfolders inside the configured source folder after the full pipeline finishes successfully. "
+        "Only the source root folder is kept. Use only when the source media has already been copied, backed up, or no longer needs to be reused."
     ),
     "remove_dst_metadata_after_pipeline": (
         "Deletes generated metadata folders and JSON/NPY sidecars below the destination folder after a successful full pipeline run. "

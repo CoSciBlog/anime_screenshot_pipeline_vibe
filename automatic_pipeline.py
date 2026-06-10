@@ -355,6 +355,35 @@ def cleanup_noise_folder_after_classification(classified_dir, logger):
         logger.info(f"No classified 0_noise/0_noisy folder to remove at {classified_dir}.")
 
 
+def cleanup_source_files_after_pipeline(src_dir, logger):
+    """Remove files below the source directory while keeping folders in place."""
+    if not os.path.isdir(src_dir):
+        logger.info(f"No source files removed because {src_dir} is not a directory.")
+        return 0
+
+    removed = 0
+    for root, _dirs, files in os.walk(src_dir):
+        for filename in files:
+            os.remove(os.path.join(root, filename))
+            removed += 1
+    logger.info(f"Removed {removed} source file(s) from {src_dir}.")
+    return removed
+
+
+def cleanup_pipeline_source_files(configs):
+    """Run post-pipeline source cleanup for configs that explicitly requested it."""
+    logger = logging.getLogger(__name__)
+    cleaned_dirs = set()
+    for config in configs:
+        if not getattr(config, "remove_src_files_after_pipeline", False):
+            continue
+        src_dir = os.path.abspath(config.src_dir)
+        if src_dir in cleaned_dirs:
+            continue
+        cleanup_source_files_after_pipeline(src_dir, logger)
+        cleaned_dirs.add(src_dir)
+
+
 def select_dataset_images(args, stage, logger):
     """Construct training set from classified images and raw images."""
     # Get the path to the intermediate directory containing the
@@ -740,3 +769,4 @@ if __name__ == "__main__":
 
     logging.getLogger().setLevel(logging.INFO)
     asyncio.run(main(configs))
+    cleanup_pipeline_source_files(configs)

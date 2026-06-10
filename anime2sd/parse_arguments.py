@@ -111,6 +111,14 @@ def create_parser():
             "(results after stage 1 are always saved)"
         ),
     )
+    parser.add_argument(
+        "--remove_src_files_after_pipeline",
+        action="store_true",
+        help=(
+            "Remove files inside --src_dir after the full selected pipeline "
+            "finishes successfully. This is destructive and keeps folders in place."
+        ),
+    )
 
     # Loading and saving of metadata using auxiliary files
     parser.add_argument(

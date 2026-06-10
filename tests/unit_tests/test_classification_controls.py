@@ -13,6 +13,7 @@ from anime2sd.classif.file_utils import (
 from automatic_pipeline import (
     cleanup_classified_aux_files,
     cleanup_noise_folder_after_classification,
+    cleanup_source_files_after_pipeline,
     cleanup_stage2_crops_after_classification,
 )
 
@@ -110,6 +111,22 @@ def test_cleanup_noise_folder_after_classification_removes_noise_aliases_only(tm
     assert not (classified / "0_noise").exists()
     assert not (classified / "0_noisy").exists()
     assert (classified / "frieren" / "image.png").exists()
+
+
+def test_cleanup_source_files_after_pipeline_keeps_folder_structure(tmp_path):
+    src = tmp_path / "src"
+    nested = src / "nested"
+    nested.mkdir(parents=True)
+    (src / "video.mkv").write_text("source", encoding="utf-8")
+    (nested / "frame.png").write_text("frame", encoding="utf-8")
+
+    removed = cleanup_source_files_after_pipeline(str(src), logging.getLogger())
+
+    assert removed == 2
+    assert src.is_dir()
+    assert nested.is_dir()
+    assert not (src / "video.mkv").exists()
+    assert not (nested / "frame.png").exists()
 
 
 def test_classified_output_stores_json_and_npy_in_metadata_subfolder(tmp_path):

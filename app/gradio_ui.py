@@ -118,6 +118,7 @@ FIELD_GROUPS = OrderedDict(
                 "pipeline_type",
                 "image_type",
                 "remove_intermediate",
+                "remove_src_files_after_pipeline",
                 "overwrite_path",
                 "load_grabber_ext",
                 "load_aux",
@@ -315,6 +316,10 @@ FIELD_GUIDANCE = {
     ),
     "remove_noise_folder_after_classification": (
         "Deletes classified 0_noise/0_noisy output after Stage 3. Use it only when rejected crops are not needed for review, debugging, or later reuse."
+    ),
+    "remove_src_files_after_pipeline": (
+        "Deletes files inside the configured source folder after the full pipeline finishes successfully. "
+        "Use only when the source media has already been copied, backed up, or no longer needs to be reused."
     ),
     "no_filter_characters": "Disabling consistency filtering retains more samples, but the final classified folders may contain more label noise.",
     "keep_unnamed_clusters": "Keeps unmatched clusters as extra material. They add coverage but do not become named reference characters.",
@@ -516,6 +521,7 @@ FIELD_GUIDANCE_DE = {
     "remove_classified_aux_files": "Löscht JSON-Metadaten und NPY-Feature-Caches, wenn sie nicht mehr benötigt werden. Spart Platz, verhindert aber Wiederverwendung ohne Neuberechnung.",
     "remove_stage2_crops_after_classification": "Löscht generierte Stage-2-Crops nach erfolgreicher Stage 3. Bei benutzerdefinierten Stage-3-Eingaben wird nichts gelöscht.",
     "remove_noise_folder_after_classification": "Löscht `0_noise`/`0_noisy` nach Stage 3. Nur nutzen, wenn verworfene Crops nicht für Review, Debugging oder spätere Nutzung gebraucht werden.",
+    "remove_src_files_after_pipeline": "Löscht Dateien im konfigurierten Quellordner erst nach erfolgreichem Abschluss der gesamten Pipeline. Nur nutzen, wenn die Quellen gesichert sind oder nicht erneut gebraucht werden.",
     "no_filter_characters": "Deaktiviert Konsistenzfilter. Dadurch bleiben mehr Samples erhalten, aber mit höherem Label-Noise-Risiko.",
     "keep_unnamed_clusters": "Behält unbenannte Cluster als Zusatzmaterial. Sie erhöhen Abdeckung, erhalten aber keine Referenznamen.",
     "cluster_merge_threshold": "Steuert, wann ähnliche Cluster zusammengeführt werden. Niedrigere Werte mergen aggressiver und können Charaktere vermischen.",

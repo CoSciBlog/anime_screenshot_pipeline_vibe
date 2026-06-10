@@ -24,6 +24,8 @@ log_prefix = {}
 overwrite_path = false
 # Pipeline type that is used to construct dataset
 remove_intermediate = false
+# Remove files inside src_dir after the full selected pipeline finishes successfully
+remove_src_files_after_pipeline = false
 
 # Metadata Loading and Saving
 [metadata_handling]

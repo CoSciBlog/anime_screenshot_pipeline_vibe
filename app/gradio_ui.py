@@ -119,6 +119,8 @@ FIELD_GROUPS = OrderedDict(
                 "image_type",
                 "remove_intermediate",
                 "remove_src_files_after_pipeline",
+                "remove_dst_metadata_after_pipeline",
+                "remove_ref_metadata_after_pipeline",
                 "overwrite_path",
                 "load_grabber_ext",
                 "load_aux",
@@ -321,6 +323,14 @@ FIELD_GUIDANCE = {
         "Deletes files inside the configured source folder after the full pipeline finishes successfully. "
         "Use only when the source media has already been copied, backed up, or no longer needs to be reused."
     ),
+    "remove_dst_metadata_after_pipeline": (
+        "Deletes generated metadata folders and JSON/NPY sidecars below the destination folder after a successful full pipeline run. "
+        "Images and captions are kept."
+    ),
+    "remove_ref_metadata_after_pipeline": (
+        "Deletes generated metadata folders and JSON/NPY sidecars below the reference folder after a successful full pipeline run. "
+        "Reference images are kept."
+    ),
     "no_filter_characters": "Disabling consistency filtering retains more samples, but the final classified folders may contain more label noise.",
     "keep_unnamed_clusters": "Keeps unmatched clusters as extra material. They add coverage but do not become named reference characters.",
     "cluster_merge_threshold": "Controls when similar clusters are joined. Lower values merge more aggressively and can mix different characters.",
@@ -522,6 +532,8 @@ FIELD_GUIDANCE_DE = {
     "remove_stage2_crops_after_classification": "Löscht generierte Stage-2-Crops nach erfolgreicher Stage 3. Bei benutzerdefinierten Stage-3-Eingaben wird nichts gelöscht.",
     "remove_noise_folder_after_classification": "Löscht `0_noise`/`0_noisy` nach Stage 3. Nur nutzen, wenn verworfene Crops nicht für Review, Debugging oder spätere Nutzung gebraucht werden.",
     "remove_src_files_after_pipeline": "Löscht Dateien im konfigurierten Quellordner erst nach erfolgreichem Abschluss der gesamten Pipeline. Nur nutzen, wenn die Quellen gesichert sind oder nicht erneut gebraucht werden.",
+    "remove_dst_metadata_after_pipeline": "Löscht generierte metadata-Ordner sowie JSON/NPY-Sidecars im Zielordner nach erfolgreichem Abschluss der gesamten Pipeline. Bilder und Captions bleiben erhalten.",
+    "remove_ref_metadata_after_pipeline": "Löscht generierte metadata-Ordner sowie JSON/NPY-Sidecars im Referenzordner nach erfolgreichem Abschluss der gesamten Pipeline. Referenzbilder bleiben erhalten.",
     "no_filter_characters": "Deaktiviert Konsistenzfilter. Dadurch bleiben mehr Samples erhalten, aber mit höherem Label-Noise-Risiko.",
     "keep_unnamed_clusters": "Behält unbenannte Cluster als Zusatzmaterial. Sie erhöhen Abdeckung, erhalten aber keine Referenznamen.",
     "cluster_merge_threshold": "Steuert, wann ähnliche Cluster zusammengeführt werden. Niedrigere Werte mergen aggressiver und können Charaktere vermischen.",

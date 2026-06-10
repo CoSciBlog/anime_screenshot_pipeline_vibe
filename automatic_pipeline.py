@@ -370,18 +370,76 @@ def cleanup_source_files_after_pipeline(src_dir, logger):
     return removed
 
 
-def cleanup_pipeline_source_files(configs):
-    """Run post-pipeline source cleanup for configs that explicitly requested it."""
+def cleanup_metadata_after_pipeline(root_dir, logger, label):
+    """Remove metadata sidecars below a root while keeping images and folders."""
+    if not root_dir:
+        logger.info(f"No {label} metadata removed because no directory is configured.")
+        return 0
+    if not os.path.isdir(root_dir):
+        logger.info(f"No {label} metadata removed because {root_dir} is not a directory.")
+        return 0
+
+    removed = 0
+    for root, dirs, files in os.walk(root_dir, topdown=False):
+        if os.path.basename(root).lower() == "metadata":
+            for filename in files:
+                os.remove(os.path.join(root, filename))
+                removed += 1
+            if not os.listdir(root):
+                os.rmdir(root)
+            continue
+
+        for filename in files:
+            if filename.lower().endswith((".json", ".npy")):
+                os.remove(os.path.join(root, filename))
+                removed += 1
+
+        for dirname in dirs:
+            directory = os.path.join(root, dirname)
+            if (
+                dirname.lower() == "metadata"
+                and os.path.isdir(directory)
+                and not os.listdir(directory)
+            ):
+                os.rmdir(directory)
+
+    logger.info(f"Removed {removed} {label} metadata file(s) from {root_dir}.")
+    return removed
+
+
+def cleanup_pipeline_outputs(configs):
+    """Run post-pipeline cleanup for configs that explicitly requested it."""
     logger = logging.getLogger(__name__)
-    cleaned_dirs = set()
+    cleaned_sources = set()
+    cleaned_metadata_roots = set()
     for config in configs:
-        if not getattr(config, "remove_src_files_after_pipeline", False):
-            continue
-        src_dir = os.path.abspath(config.src_dir)
-        if src_dir in cleaned_dirs:
-            continue
-        cleanup_source_files_after_pipeline(src_dir, logger)
-        cleaned_dirs.add(src_dir)
+        if getattr(config, "remove_src_files_after_pipeline", False):
+            src_dir = os.path.abspath(config.src_dir)
+            if src_dir not in cleaned_sources:
+                cleanup_source_files_after_pipeline(src_dir, logger)
+                cleaned_sources.add(src_dir)
+
+        cleanup_roots = [
+            (
+                "dst",
+                config.dst_dir,
+                getattr(config, "remove_dst_metadata_after_pipeline", False),
+            ),
+            (
+                "reference",
+                config.character_ref_dir,
+                getattr(config, "remove_ref_metadata_after_pipeline", False),
+            ),
+        ]
+        for label, root_dir, enabled in cleanup_roots:
+            if not enabled or not root_dir:
+                continue
+            metadata_root = os.path.abspath(root_dir)
+            cleanup_key = (label, metadata_root)
+            if cleanup_key in cleaned_metadata_roots:
+                continue
+            cleanup_metadata_after_pipeline(metadata_root, logger, label)
+            cleaned_metadata_roots.add(cleanup_key)
 
 
 def select_dataset_images(args, stage, logger):
@@ -769,4 +827,4 @@ if __name__ == "__main__":
 
     logging.getLogger().setLevel(logging.INFO)
     asyncio.run(main(configs))
-    cleanup_pipeline_source_files(configs)
+    cleanup_pipeline_outputs(configs)

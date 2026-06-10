@@ -12,6 +12,7 @@ from anime2sd.classif.file_utils import (
 )
 from automatic_pipeline import (
     cleanup_classified_aux_files,
+    cleanup_metadata_after_pipeline,
     cleanup_noise_folder_after_classification,
     cleanup_source_files_after_pipeline,
     cleanup_stage2_crops_after_classification,
@@ -127,6 +128,28 @@ def test_cleanup_source_files_after_pipeline_keeps_folder_structure(tmp_path):
     assert nested.is_dir()
     assert not (src / "video.mkv").exists()
     assert not (nested / "frame.png").exists()
+
+
+def test_cleanup_metadata_after_pipeline_keeps_images_and_captions(tmp_path):
+    root = tmp_path / "dst"
+    character = root / "training" / "frieren"
+    metadata = character / "metadata"
+    metadata.mkdir(parents=True)
+    (character / "image.webp").write_text("image", encoding="utf-8")
+    (character / "image.txt").write_text("caption", encoding="utf-8")
+    (character / ".legacy_meta.json").write_text("{}", encoding="utf-8")
+    (character / ".legacy_ccip.npy").write_bytes(b"feature")
+    (metadata / ".image_meta.json").write_text("{}", encoding="utf-8")
+    (metadata / ".image_ccip.npy").write_bytes(b"feature")
+
+    removed = cleanup_metadata_after_pipeline(str(root), logging.getLogger(), "dst")
+
+    assert removed == 4
+    assert (character / "image.webp").exists()
+    assert (character / "image.txt").exists()
+    assert not metadata.exists()
+    assert not (character / ".legacy_meta.json").exists()
+    assert not (character / ".legacy_ccip.npy").exists()
 
 
 def test_classified_output_stores_json_and_npy_in_metadata_subfolder(tmp_path):

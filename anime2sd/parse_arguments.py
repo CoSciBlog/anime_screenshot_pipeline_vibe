@@ -119,6 +119,24 @@ def create_parser():
             "finishes successfully. This is destructive and keeps folders in place."
         ),
     )
+    parser.add_argument(
+        "--remove_dst_metadata_after_pipeline",
+        action="store_true",
+        help=(
+            "Remove generated metadata folders and JSON/NPY sidecars inside "
+            "--dst_dir after the full selected pipeline finishes successfully. "
+            "Image files are kept."
+        ),
+    )
+    parser.add_argument(
+        "--remove_ref_metadata_after_pipeline",
+        action="store_true",
+        help=(
+            "Remove generated metadata folders and JSON/NPY sidecars inside "
+            "--character_ref_dir after the full selected pipeline finishes "
+            "successfully. Reference image files are kept."
+        ),
+    )
 
     # Loading and saving of metadata using auxiliary files
     parser.add_argument(

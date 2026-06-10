@@ -22,7 +22,7 @@ The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local 
 - A **Workspace root** can derive the input, output, reference, and log paths from one Windows folder. Missing `src`, `ref`, and `logs` folders are created automatically on run or with **Create workspace folders**; `dst` stage folders are created only when output is produced. Existing workspace contents are preserved; a separate **Clear generated output** action removes only generated `dst` contents.
 - Directory and file settings accept Windows paths such as `C:\datasets\anime\output`; paths are normalized before a configuration is saved or a run starts.
 - Consecutive selected stages are executed as one pipeline segment through `automatic_pipeline.py`, so generated output flows into the next selected stage correctly.
-- The General settings include `--remove_src_files_after_pipeline` for deleting files inside `src_dir` only after the full selected pipeline completes successfully. It is disabled by default and should only be enabled when the source media has been backed up or is no longer needed.
+- The General settings include post-run cleanup checkboxes for deleting source files, destination metadata, and reference metadata only after the full selected pipeline completes successfully. They are disabled by default; image files are preserved for the metadata cleanup options.
 - **Stop pipeline** cancels the active UI run and terminates its pipeline process tree without closing the web interface.
 - A live status message and progress bar show the active stage and completed selected stages. Progress output is deduplicated in the web log and mirrored in the launching terminal.
 - **Shut down server**, placed below the stage settings at the end of the page, requests confirmation before it terminates an active pipeline and closes the local Gradio server completely.
@@ -87,6 +87,8 @@ Stage 3 also provides dataset-balance and storage controls:
 - `--remove_stage2_crops_after_classification` removes the generated Stage 2 cropped intermediate directory after Stage 3 has successfully classified it. It skips cleanup when Stage 3 is run from a user-provided input directory.
 - `--remove_noise_folder_after_classification` removes classified noise output folders named `0_noise` or `0_noisy` after Stage 3 succeeds. This is useful when those rejected crops have already served their purpose and should not occupy disk space or be reviewed later.
 - `--remove_src_files_after_pipeline` is a General cleanup option that removes files below `src_dir` after all selected stages have completed successfully. Folder structure is kept; failed or stopped runs do not trigger this cleanup.
+- `--remove_dst_metadata_after_pipeline` is a separate General cleanup option that removes generated `metadata` folders and loose `.json`/`.npy` sidecars below `dst_dir` after a successful full run while keeping images and captions.
+- `--remove_ref_metadata_after_pipeline` does the same cleanup below `character_ref_dir` after a successful full run while keeping reference images.
 
 ### Preprocessing Messages
 

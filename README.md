@@ -24,7 +24,7 @@ The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local 
 - Consecutive selected stages are executed as one pipeline segment through `automatic_pipeline.py`, so generated output flows into the next selected stage correctly.
 - The General settings include post-run cleanup checkboxes for deleting source contents, destination metadata, and reference metadata only after the full selected pipeline completes successfully. They are disabled by default; image files are preserved for the destination and reference metadata cleanup options.
 - **Stop pipeline** cancels the active UI run and terminates its pipeline process tree without closing the web interface.
-- A live status message and progress bar show the active stage and completed selected stages. Progress output is deduplicated in the web log and mirrored in the launching terminal.
+- A live status message and progress bar show the active stage and completed selected stages. Progress output is deduplicated in the web log and mirrored in the launching terminal; terminal severity lines are color-highlighted for easier scanning.
 - **Shut down server**, placed below the stage settings at the end of the page, requests confirmation before it terminates an active pipeline and closes the local Gradio server completely.
 
 The UI listens only on `http://127.0.0.1:7866`. Port `7866` is intentionally fixed for repeatable bookmarks and Pinokio integration. Close another service using that port before launching Frame Lab.
@@ -126,14 +126,14 @@ The root `pytest.ini` collects the application tests under `tests/` only; the bu
 
 ### Terminal Output
 
-Pipeline logs use severity colors when output is connected to an interactive terminal:
+Pipeline and UI terminal messages use severity colors:
 
 - `INFO` is blue.
 - `WARNING` is yellow.
 - `ERROR` is red.
 - `CRITICAL` is bold red.
 
-Color codes are omitted automatically when output is piped into the Gradio run log or a file. Set `NO_COLOR=1` to disable ANSI coloring in a terminal.
+Saving the UI configuration also prints an `INFO` line in the launching terminal with the saved TOML path. Color codes are omitted from the Gradio run log. Set `NO_COLOR=1` to disable ANSI coloring in the terminal.
 
 The UI summarizes ordinary `tqdm` phases with their reported progress and ETA. During the synchronous OPTICS clustering fit, the underlying library does not expose reliable intermediate percentage or ETA data; the UI displays an active clustering heartbeat and elapsed time until that phase finishes.
 

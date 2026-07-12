@@ -180,6 +180,22 @@ def test_run_output_is_mirrored_to_terminal(capsys):
     assert capsys.readouterr().out == "running stage\n"
 
 
+def test_run_output_colors_severity_lines_in_terminal(monkeypatch, capsys):
+    monkeypatch.delenv("NO_COLOR", raising=False)
+
+    ui.mirror_run_output("pipeline - WARNING - check settings\n")
+
+    assert capsys.readouterr().out == "\033[33mpipeline - WARNING - check settings\033[0m\n"
+
+
+def test_no_color_keeps_terminal_severity_lines_plain(monkeypatch, capsys):
+    monkeypatch.setenv("NO_COLOR", "1")
+
+    ui.mirror_run_output("pipeline - ERROR - failed\n")
+
+    assert capsys.readouterr().out == "pipeline - ERROR - failed\n"
+
+
 def test_run_log_cleaning_replaces_repeated_progress_lines():
     history = []
 
@@ -222,6 +238,23 @@ def test_global_configuration_records_stages_and_exports_same_file(tmp_path, mon
     assert saved["ui"]["enabled_stages"] == [2, 3]
     assert saved["ui"]["workspace_root"] == os.path.normpath(r"C:\datasets\anime\project")
     assert export_path == str(output_path)
+
+
+def test_save_configuration_prints_terminal_status(tmp_path, monkeypatch, capsys):
+    values = [
+        ui.component_value(action, ui.defaults().get(action.dest))
+        for action in ui.ACTIONS
+    ]
+    monkeypatch.setattr(ui, "ROOT", tmp_path)
+    monkeypatch.setattr(ui, "GLOBAL_CONFIG", tmp_path / "configs" / "ui" / "configuration.toml")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+
+    ui.save_configuration("", ["2", "3"], *values)
+
+    assert (
+        capsys.readouterr().out
+        == "\033[34mFrame Lab - INFO - Configuration saved to configs/ui/configuration.toml.\033[0m\n"
+    )
 
 
 def test_global_configuration_records_stage_three_cleanup_toggles(tmp_path, monkeypatch):

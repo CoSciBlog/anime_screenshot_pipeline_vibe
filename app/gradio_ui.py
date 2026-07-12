@@ -38,6 +38,15 @@ ACTIVE_PIPELINE_PROCESS: subprocess.Popen[str] | None = None
 WORKSPACE_DIRECTORIES = ("src", "ref", "logs")
 WORKSPACE_RESERVED_DIRECTORIES = (*WORKSPACE_DIRECTORIES, "dst")
 ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+SEVERITY_RE = re.compile(r"\b(CRITICAL|ERROR|WARNING|INFO|DEBUG)\b")
+TERMINAL_SEVERITY_COLORS = {
+    "DEBUG": "\033[36m",
+    "INFO": "\033[34m",
+    "WARNING": "\033[33m",
+    "ERROR": "\033[31m",
+    "CRITICAL": "\033[1;31m",
+}
+TERMINAL_RESET = "\033[0m"
 STAGE_START_RE = re.compile(r"Start stage\s+(\d+)")
 TQDM_PROGRESS_RE = re.compile(
     r"(?P<label>[^:\n]+):\s*(?P<percent>\d+)%\|.*?\|\s*"
@@ -1074,8 +1083,31 @@ def progress_markup(
     )
 
 
+def terminal_color_enabled() -> bool:
+    return "NO_COLOR" not in os.environ
+
+
+def colorize_terminal_line(line: str) -> str:
+    if not terminal_color_enabled() or ANSI_ESCAPE_RE.search(line):
+        return line
+    match = SEVERITY_RE.search(line)
+    if not match:
+        return line
+    color = TERMINAL_SEVERITY_COLORS.get(match.group(1))
+    if not color:
+        return line
+    line_ending = "\n" if line.endswith("\n") else ""
+    message = line[:-1] if line_ending else line
+    return f"{color}{message}{TERMINAL_RESET}{line_ending}"
+
+
 def mirror_run_output(line: str) -> None:
-    print(line, end="" if line.endswith("\n") else "\n", flush=True)
+    colored_line = colorize_terminal_line(line)
+    print(colored_line, end="" if colored_line.endswith("\n") else "\n", flush=True)
+
+
+def print_terminal_status(level: str, message: str) -> None:
+    mirror_run_output(f"Frame Lab - {level} - {message}")
 
 
 def process_output_with_heartbeat(process: subprocess.Popen[str]):
@@ -1144,6 +1176,7 @@ def save_configuration(
     with GLOBAL_CONFIG.open("w", encoding="utf-8") as handle:
         toml.dump(config, handle)
     relative_path = str(GLOBAL_CONFIG.relative_to(ROOT)).replace("\\", "/")
+    print_terminal_status("INFO", f"Configuration saved to {relative_path}.")
     return (
         f"{ui_text(language, 'config_saved')} `{relative_path}`",
         str(GLOBAL_CONFIG),

@@ -2,6 +2,7 @@
 
 ## 0.0.2 - 2026-07-12
 
+- Added a terminal `INFO` message when the Gradio UI configuration is saved, and color-highlighted mirrored UI terminal severity lines for `INFO`, `WARNING`, `ERROR`, and `CRITICAL`.
 - Fixed Stage 2 character cropping with `--detect_level x` by selecting the available `person_detect_v0_x` model instead of the missing `person_detect_v1.1_x` model.
 - Updated the package version to `0.0.2`.
 

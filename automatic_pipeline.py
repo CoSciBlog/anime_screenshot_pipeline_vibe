@@ -40,6 +40,21 @@ from anime2sd.waifuc_customize import LocalSource, SaveExporter
 from anime2sd.waifuc_customize import MinFaceCountAction, MinHeadCountAction
 
 
+PERSON_DETECTION_VERSION_BY_LEVEL = {
+    # imgutils no longer publishes person_detect_v1.1_x; the x-sized model is
+    # available in the v0 repository set.
+    "x": "v0",
+}
+
+
+def person_detection_config(detect_level):
+    config = {"level": detect_level}
+    version = PERSON_DETECTION_VERSION_BY_LEVEL.get(detect_level)
+    if version:
+        config["version"] = version
+    return config
+
+
 def update_args_from_toml(
     args: argparse.Namespace, toml_path: str
 ) -> argparse.Namespace:
@@ -225,7 +240,7 @@ def crop_characters(args, stage, logger):
     logger.info(f"Detecting and cropping individual characters to {dst_dir} ...")
 
     source = LocalSource(src_dir)
-    detect_config_person = {"level": args.detect_level}
+    detect_config_person = person_detection_config(args.detect_level)
     if args.detect_level in ["s", "n"]:
         detect_level_head_halfbody = args.detect_level
     else:
@@ -239,7 +254,7 @@ def crop_characters(args, stage, logger):
             person_conf=detect_config_person,
         )
         if args.use_3stage_crop == 2
-        else PersonSplitAction(keep_original=False, level=args.detect_level)
+        else PersonSplitAction(keep_original=False, **detect_config_person)
     )
 
     source = source.attach(

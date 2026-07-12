@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased - 2026-05-25
+## 0.0.2 - 2026-07-12
+
+- Fixed Stage 2 character cropping with `--detect_level x` by selecting the available `person_detect_v0_x` model instead of the missing `person_detect_v1.1_x` model.
+- Updated the package version to `0.0.2`.
+
+## 0.0.1 - 2026-05-25
 
 - Changed `--remove_src_files_after_pipeline` so it now clears source files, generated metadata, and source media subfolders below `src_dir` while leaving only the source root folder.
 - Added separate General cleanup settings, `--remove_dst_metadata_after_pipeline` and `--remove_ref_metadata_after_pipeline`, to delete generated metadata below destination and reference folders after a successful pipeline run while keeping images.

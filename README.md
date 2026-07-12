@@ -60,6 +60,10 @@ dst\intermediate\screenshots\classified\frieren\
 
 When preprocessing encounters legacy `.json` or `.npy` sidecars beside an input image, it relocates those existing files to the matching `metadata` child directory without deleting image data.
 
+### Character Detection Models
+
+Stage 2 uses `--detect_level` for person detection. The `x` level is still supported, but the current `imgutils` model repository publishes it as `person_detect_v0_x` rather than `person_detect_v1.1_x`; the pipeline selects that available model automatically. Levels `n`, `s`, and `m` continue to use their default detector version.
+
 ### Character Reference Images
 
 Set `--character_ref_dir` under **Stage 3 - Classify**, or use the workspace `ref` directory. Reference images are consumed in Stage 3 to map detected character crops or clusters to known character names; later stages use the resulting metadata rather than reading the reference folder again.

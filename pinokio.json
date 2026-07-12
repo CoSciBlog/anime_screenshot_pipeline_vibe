@@ -1,10 +1,13 @@
 {
-  "title": "Anime2SD Frame Lab",
+  "title": "anime-screenshot-pipeline_vibe",
   "description": "Build anime training datasets with a configurable local Gradio workflow.",
   "tags": [
     "dataset",
     "anime",
     "gradio",
     "nvidia"
-  ]
+  ],
+  "plugin": {
+    "menu": []
+  }
 }

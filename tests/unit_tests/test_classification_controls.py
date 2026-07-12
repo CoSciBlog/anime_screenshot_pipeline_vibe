@@ -16,9 +16,15 @@ from automatic_pipeline import (
     cleanup_noise_folder_after_classification,
     cleanup_source_files_after_pipeline,
     cleanup_stage2_crops_after_classification,
+    person_detection_config,
 )
 
 classification = importlib.import_module("anime2sd.classif.classify_characters")
+
+
+def test_person_detection_x_level_uses_available_model_version():
+    assert person_detection_config("x") == {"level": "x", "version": "v0"}
+    assert person_detection_config("n") == {"level": "n"}
 
 
 def test_episode_key_uses_episode_folder_or_file_pattern():

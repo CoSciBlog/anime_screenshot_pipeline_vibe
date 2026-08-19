@@ -40,6 +40,11 @@ from anime2sd.parse_arguments import parse_arguments
 from anime2sd.waifuc_customize import LocalSource, SaveExporter
 from anime2sd.waifuc_customize import MinFaceCountAction, MinHeadCountAction
 from anime2sd.invalid_images import InvalidImageHandler
+from anime2sd.stage2_cropping import (
+    SingleCharacterAwarePersonSplitAction,
+    Stage2CropStats,
+    log_stage2_crop_summary,
+)
 
 
 PERSON_DETECTION_VERSION_BY_LEVEL = {
@@ -255,35 +260,65 @@ def crop_characters(args, stage, logger):
     else:
         detect_level_head_halfbody = "n"
     detect_config = {"level": detect_level_head_halfbody}
-    crop_action = (
-        ThreeStageSplitAction(
-            split_person=True,
+    keep_single_uncropped = getattr(
+        args, "keep_single_character_uncropped", False
+    )
+    min_area_ratio = getattr(
+        args, "single_character_uncropped_min_area_ratio", 0.0
+    )
+    if keep_single_uncropped:
+        crop_stats = Stage2CropStats()
+        crop_action = SingleCharacterAwarePersonSplitAction(
+            keep_single_character_uncropped=True,
+            single_character_uncropped_min_area_ratio=min_area_ratio,
+            min_crop_size=args.min_crop_size,
+            crop_with_head=args.crop_with_head,
+            crop_with_face=args.crop_with_face,
+            use_3stage_crop=args.use_3stage_crop == 2,
+            person_conf=detect_config_person,
             head_conf=detect_config,
             halfbody_conf=detect_config,
-            person_conf=detect_config_person,
+            logger=logger,
+            stats=crop_stats,
         )
-        if args.use_3stage_crop == 2
-        else PersonSplitAction(keep_original=False, **detect_config_person)
-    )
-
-    source = source.attach(
-        # NoMonochromeAction(),
-        crop_action,
-        MinSizeFilterAction(args.min_crop_size),
-        # Not used here because it can be problematic for multi-character scene
-        # Some not moving while other moving
-        # FilterSimilarAction('all'),
-    )
-    if args.crop_with_head:
+        source = source.attach(crop_action)
+    else:
+        # Preserve the legacy action chain exactly when the feature is disabled.
+        crop_action = (
+            ThreeStageSplitAction(
+                split_person=True,
+                head_conf=detect_config,
+                halfbody_conf=detect_config,
+                person_conf=detect_config_person,
+            )
+            if args.use_3stage_crop == 2
+            else PersonSplitAction(keep_original=False, **detect_config_person)
+        )
         source = source.attach(
-            MinHeadCountAction(1, level="n"),
+            # NoMonochromeAction(),
+            crop_action,
+            MinSizeFilterAction(args.min_crop_size),
+            # Not used here because it can be problematic for multi-character scene
+            # Some not moving while other moving
+            # FilterSimilarAction('all'),
         )
-    if args.crop_with_face:
-        source = source.attach(
-            MinFaceCountAction(1, level="n"),
-        )
+        if args.crop_with_head:
+            source = source.attach(
+                MinHeadCountAction(1, level="n"),
+            )
+        if args.crop_with_face:
+            source = source.attach(
+                MinFaceCountAction(1, level="n"),
+            )
 
     source.export(SaveExporter(dst_dir, no_meta=False, save_caption=False))
+    if keep_single_uncropped:
+        log_stage2_crop_summary(
+            logger,
+            crop_stats,
+            keep_single_character_uncropped=True,
+            min_area_ratio=min_area_ratio,
+        )
 
 
 def classify_characters(args, stage, logger):

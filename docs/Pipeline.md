@@ -130,6 +130,10 @@ This stage along with stage 3 allow to identify the characters of each image. Mo
   **Example usage:** --detect_level n
 - `use_3stage_crop`: Use 3-stage cropping to additionally get head and half body crops. It can be used at either stage 2 or 4 (if used at stage 4 the cropped images are directly saved to the `classified` folder).  
   **Example usage:** "--use_3stage_crop 2" or "--use_3stage_crop 4"
+- `keep_single_character_uncropped`: Keep the complete original image when exactly one valid character is detected. Multi-character images continue to produce individual character crops. Disabled by default.
+  **Example usage:** `--keep_single_character_uncropped`
+- `single_character_uncropped_min_area_ratio`: Minimum fraction of the full image area that the single detected person's bounding box must occupy before the original is kept. `0` disables the check.
+  **Example usage:** `--single_character_uncropped_min_area_ratio 0.10`
 
 
 ## Stage 3: Character Classification

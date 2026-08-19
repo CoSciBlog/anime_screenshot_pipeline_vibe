@@ -103,6 +103,40 @@ After reviewing quarantined files, replace or repair them in the original source
 
 Stage 2 uses `--detect_level` for person detection. The `x` level is still supported, but the current `imgutils` model repository publishes it as `person_detect_v0_x` rather than `person_detect_v1.1_x`; the pipeline selects that available model automatically. Levels `n`, `s`, and `m` continue to use their default detector version.
 
+### Optional Uncropped Single-Character Images
+
+Stage 2 normally crops every detected character to the person bounding box. Version 0.0.4 adds an opt-in mode that preserves the complete source image when exactly one valid character is present:
+
+```toml
+[character_cropping]
+keep_single_character_uncropped = true
+single_character_uncropped_min_area_ratio = 0.10
+```
+
+The same settings are available in the **Stage 2 - Detect** tab and on the CLI as `--keep_single_character_uncropped` and `--single_character_uncropped_min_area_ratio`.
+
+- No valid character: Stage 2 retains its previous no-output behavior.
+- Exactly one valid character: the original filename, resolution, composition, background, and full-body pose are preserved when the mode is enabled and the optional area threshold is met.
+- Two or more valid characters: each character is cropped separately for unambiguous Stage 3 classification.
+- `single_character_uncropped_min_area_ratio = 0` disables the size-ratio check. A value of `0.10` means the detected person box must cover at least 10% of the full image; otherwise the normal character crop is generated.
+- With Stage-2 `use_3stage_crop`, an accepted single-character original produces no additional person, halfbody, or head variants. Multi-character images retain the three-stage behavior.
+- `crop_with_head` and `crop_with_face` are evaluated on detected person crops before the valid-character count is used for the decision.
+- `min_crop_size` continues to filter generated crops, but does not reject a deliberately preserved full original based on the person-box dimensions.
+
+Person detection runs once per source image. The same detection result supplies the valid-person count, bounding boxes, crop decisions, and generated person crops. Preserved images carry compatible metadata including `character_crop_mode = "uncropped_single"`, `person_count`, `person_bbox`, and `person_detection`; generated crops use `character_crop_mode = "person_crop"`.
+
+Stage 3 reads preserved originals through the same CCIP feature/classification path as normal crops. Their metadata continues to point to the source image. During Stage 4, the existing original-path and image-area selection logic recognizes the unchanged Stage-2 representation, processes the source only once, and avoids adding an identical original through both the classified and raw paths.
+
+Example CLI use:
+
+```bash
+python automatic_pipeline.py \
+    --start_stage 2 \
+    --end_stage 4 \
+    --keep_single_character_uncropped \
+    --single_character_uncropped_min_area_ratio 0.10
+```
+
 ### Character Reference Images
 
 Set `--character_ref_dir` under **Stage 3 - Classify**, or use the workspace `ref` directory. Reference images are consumed in Stage 3 to map detected character crops or clusters to known character names; later stages use the resulting metadata rather than reading the reference folder again.

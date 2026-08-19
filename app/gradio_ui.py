@@ -182,6 +182,8 @@ FIELD_GROUPS = OrderedDict(
                 "crop_with_face",
                 "detect_level",
                 "use_3stage_crop",
+                "keep_single_character_uncropped",
+                "single_character_uncropped_min_area_ratio",
             ],
         ),
         (
@@ -331,6 +333,14 @@ FIELD_GUIDANCE = {
     "crop_with_face": "Most strict identity filter. It improves character certainty but reduces recall for back views, masks, and stylized faces.",
     "detect_level": "Larger detector levels can find more difficult crops, while smaller levels are faster and use less memory.",
     "use_3stage_crop": "Adds person, half-body, and head variants. Use it once when close-up training coverage matters; it increases runtime and intermediate size.",
+    "keep_single_character_uncropped": (
+        "When exactly one valid character is detected, keep the complete source image instead of cropping to the character bounding box. "
+        "Images containing multiple characters are still split into individual character crops. Recommended when preserving full-body poses, composition, and background is more important than tight crops."
+    ),
+    "single_character_uncropped_min_area_ratio": (
+        "Minimum fraction of the total image area that the single detected character bounding box must occupy before the full image is kept. "
+        "0 disables this check; 0.10 requires at least 10%."
+    ),
     "n_add_to_ref_per_character": "Adds confident matches back into the reference set. This can improve future runs, but bad matches will also be reinforced.",
     "max_images_per_character": "Caps saved images per recognized character to reduce imbalance. Set 0 when you want every accepted match.",
     "max_images_per_character_per_episode": "Caps repeated matches per character within each SxxExx episode, reducing near-duplicate dominance from long scenes.",
@@ -553,6 +563,14 @@ FIELD_GUIDANCE_DE = {
     "crop_with_face": "Strengster Identitätsfilter. Erhöht Sicherheit, senkt aber Recall bei Rückenansichten, Masken oder stilisierten Gesichtern.",
     "detect_level": "Größere Detektoren finden schwierigere Crops, kleinere sind schneller und sparsamer.",
     "use_3stage_crop": "Erzeugt Personen-, Halbbody- und Kopfvarianten. Sinnvoll für Close-ups, aber langsam und speicherintensiv.",
+    "keep_single_character_uncropped": (
+        "Behält das vollständige Originalbild bei, wenn genau ein gültiger Charakter erkannt wurde. "
+        "Bilder mit mehreren Charakteren werden weiterhin in einzelne Charakter-Crops aufgeteilt. Dadurch bleiben Ganzkörperaufnahme, Pose, Hintergrund und ursprüngliche Bildkomposition erhalten."
+    ),
+    "single_character_uncropped_min_area_ratio": (
+        "Mindestanteil der gesamten Bildfläche, den die Bounding Box des einzelnen Charakters einnehmen muss, bevor das Vollbild behalten wird. "
+        "0 deaktiviert die Prüfung; 0,10 bedeutet mindestens 10 Prozent."
+    ),
     "n_add_to_ref_per_character": "Fügt sichere Treffer den Referenzen hinzu. Kann spätere Läufe verbessern, verstärkt aber auch falsche Zuordnungen.",
     "max_images_per_character": "Begrenzt gespeicherte Bilder pro erkanntem Charakter. 0 speichert alle akzeptierten Treffer.",
     "max_images_per_character_per_episode": "Begrenzt wiederholte Treffer pro Charakter und SxxExx-Episode, damit lange Szenen nicht dominieren.",
@@ -1572,6 +1590,16 @@ def make_component(action: argparse.Action, value: Any, language: str | None = D
     if action.choices:
         return gr.Dropdown(label=label, choices=list(action.choices), value=shown, info=info)
     if action.type in (int, float):
+        if action.dest == "single_character_uncropped_min_area_ratio":
+            return gr.Number(
+                label=label,
+                value=None if shown == "" else shown,
+                precision=4,
+                minimum=0,
+                maximum=1,
+                step=0.01,
+                info=info,
+            )
         precision = 0 if action.type is int else None
         return gr.Number(label=label, value=None if shown == "" else shown, precision=precision, info=info)
     if action.nargs in ("*", "+"):

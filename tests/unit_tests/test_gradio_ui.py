@@ -48,6 +48,8 @@ def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatc
     assert "--quarantine_invalid_images" in components
     assert "--quarantine_dir" in components
     assert "--invalid_image_log" in components
+    assert "--keep_single_character_uncropped" in components
+    assert "--single_character_uncropped_min_area_ratio" in components
     assert "create_workspace" in dependencies
     assert "clear_workspace_output" in dependencies
     assert "run_saved_profile" in dependencies
@@ -251,6 +253,51 @@ def test_invalid_image_defaults_are_safe_and_configurable():
     assert defaults["quarantine_invalid_images"] is True
     assert defaults["quarantine_dir"] == "auto"
     assert defaults["invalid_image_log"] is True
+
+
+def test_single_character_crop_defaults_preserve_legacy_behavior():
+    defaults = ui.defaults(include_screenshots=False)
+
+    assert defaults["keep_single_character_uncropped"] is False
+    assert defaults["single_character_uncropped_min_area_ratio"] == 0.0
+
+
+def test_single_character_crop_settings_are_persisted_in_config():
+    values = [
+        ui.component_value(action, ui.defaults().get(action.dest))
+        for action in ui.ACTIONS
+    ]
+    keep_index = next(
+        index
+        for index, action in enumerate(ui.ACTIONS)
+        if action.dest == "keep_single_character_uncropped"
+    )
+    ratio_index = next(
+        index
+        for index, action in enumerate(ui.ACTIONS)
+        if action.dest == "single_character_uncropped_min_area_ratio"
+    )
+    values[keep_index] = True
+    values[ratio_index] = 0.1
+
+    config = ui.build_config(values, ui.ACTIONS)
+
+    assert config["keep_single_character_uncropped"] is True
+    assert config["single_character_uncropped_min_area_ratio"] == 0.1
+
+
+def test_single_character_area_ratio_control_uses_fractional_range():
+    config = ui.build_interface().get_config_file()
+    component = next(
+        component
+        for component in config["components"]
+        if component.get("props", {}).get("label")
+        == "--single_character_uncropped_min_area_ratio"
+    )
+
+    assert component["props"]["minimum"] == 0
+    assert component["props"]["maximum"] == 1
+    assert component["props"]["step"] == 0.01
 
 
 def test_consecutive_selected_stages_are_run_as_one_pipeline_segment():

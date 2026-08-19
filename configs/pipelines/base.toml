@@ -75,6 +75,10 @@ detect_level = "n"
 # This is slow and should only be called once for a set of images. Possible to use either at stage 2 or 4.
 # Set to {} or comment this line to disable
 use_3stage_crop = {}
+# Keep the complete source image when exactly one valid character is detected
+keep_single_character_uncropped = false
+# Minimum detected-person area ratio required to keep a single-character original; 0 disables the check
+single_character_uncropped_min_area_ratio = 0.0
 
 # Character Clustering/Classification Configuration
 [character_classification]

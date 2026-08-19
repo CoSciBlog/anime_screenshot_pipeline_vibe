@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.4 - 2026-08-20
+
+### Added
+
+- Added the optional Stage 2 `--keep_single_character_uncropped` mode, which preserves the complete source image when exactly one valid character is detected while retaining normal per-character crops for multi-character images.
+- Added `--single_character_uncropped_min_area_ratio` to require a configurable minimum person bounding-box area before a single-character original is preserved; `0` disables the threshold.
+- Added English and German Gradio controls, guidance, TOML persistence, decision metadata, and Stage 2 summary statistics for the new crop mode.
+- Added focused tests for legacy behavior, zero/single/multiple detections, head/face validation, three-stage cropping, one-pass person detection, Stage 3 compatibility, and Stage 4 duplicate prevention.
+
+### Changed
+
+- Updated the package version to `0.0.4`.
+
 ## 0.0.3 - 2026-08-20
 
 ### Fixed

@@ -400,6 +400,25 @@ def create_parser():
             "Possible to use either at stage 2 or 4."
         ),
     )
+    parser.add_argument(
+        "--keep_single_character_uncropped",
+        action="store_true",
+        default=False,
+        help=(
+            "Keep the complete source image when exactly one valid character is "
+            "detected. Multi-character images are still split into individual "
+            "character crops."
+        ),
+    )
+    parser.add_argument(
+        "--single_character_uncropped_min_area_ratio",
+        type=float,
+        default=0.0,
+        help=(
+            "Minimum fraction of the full image occupied by the single detected "
+            "character before the original is kept. 0 disables this check."
+        ),
+    )
 
     # Arguments for character clustering/classification
     # Most important

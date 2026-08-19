@@ -15,6 +15,8 @@ class ColorFormatter(logging.Formatter):
         logging.CRITICAL: "\033[1;31m",
     }
     RESET = "\033[0m"
+    SUMMARY_COLOR = "\033[1;36m"
+    OK_COLOR = "\033[32m"
 
     def __init__(self, fmt: str, use_color: bool = False):
         super().__init__(fmt)
@@ -24,7 +26,12 @@ class ColorFormatter(logging.Formatter):
         message = super().format(record)
         if not self.use_color:
             return message
-        color = self.COLORS.get(record.levelno)
+        if "[SUMMARY]" in message:
+            color = self.SUMMARY_COLOR
+        elif "[OK]" in message:
+            color = self.OK_COLOR
+        else:
+            color = self.COLORS.get(record.levelno)
         return f"{color}{message}{self.RESET}" if color else message
 
 

@@ -21,6 +21,12 @@ from .emb_utils import update_emb_init_info
 from .character import Character
 from .remove_duplicates import DuplicateRemover
 from .waifuc_customize import LocalSource, SaveExporter
+from .invalid_images import (
+    EXPECTED_IMAGE_ERRORS,
+    InvalidImageHandler,
+    load_decoded_image,
+    validate_image,
+)
 
 
 def parse_char_name(folder_name: str) -> str:
@@ -473,6 +479,7 @@ def resize_character_images(
     n_nocharacter_frames: int,
     to_resize: bool = True,
     logger: Optional[logging.Logger] = None,
+    invalid_image_handler: Optional[InvalidImageHandler] = None,
 ) -> None:
     """
     Process images from source directories, resize them if needed,
@@ -505,6 +512,30 @@ def resize_character_images(
         logger = logging.getLogger()
     nocharacter_frames = []
     processed_img_paths = set()
+
+    def load_or_validate(img_path: str, source_root: str):
+        if invalid_image_handler is not None:
+            invalid_image_handler.record_attempt(4)
+        try:
+            image = load_decoded_image(img_path) if to_resize else None
+            if not to_resize:
+                validate_image(img_path)
+        except EXPECTED_IMAGE_ERRORS as exc:
+            if invalid_image_handler is None:
+                raise ValueError(f"Error reading image: {img_path}") from exc
+            invalid_image_handler.handle_invalid_image(
+                img_path,
+                exc,
+                stage=4,
+                operation="resize_or_copy_dataset_image",
+                source_type="source",
+                source_root=source_root,
+            )
+            return False, None
+        if invalid_image_handler is not None:
+            invalid_image_handler.record_success(4)
+        return True, image
+
     for src_dir in src_dirs:
         if os.path.basename(src_dir) == "raw":
             warn = False
@@ -533,11 +564,10 @@ def resize_character_images(
                         processed_img_paths.add(original_path)
                         img_path = original_path
 
+                valid, img = load_or_validate(img_path, src_dir)
+                if not valid:
+                    continue
                 if to_resize:
-                    try:
-                        img = Image.open(img_path)
-                    except IOError:
-                        raise ValueError(f"Error reading image: {img_path}")
                     resized_img = resize_image(img, max_size)
                     save_image_and_meta(
                         resized_img, img_path, save_dir, ext, image_type, logger
@@ -558,11 +588,21 @@ def resize_character_images(
     logger.info(f"Processing {len(selected_frames)} no character images ...")
 
     for img_path in tqdm(selected_frames):
+        source_root = next(
+            (
+                root
+                for root in src_dirs
+                if os.path.commonpath(
+                    [os.path.abspath(root), os.path.abspath(img_path)]
+                )
+                == os.path.abspath(root)
+            ),
+            os.path.dirname(img_path),
+        )
+        valid, img = load_or_validate(img_path, source_root)
+        if not valid:
+            continue
         if to_resize:
-            try:
-                img = Image.open(img_path)
-            except IOError:
-                raise ValueError(f"Error reading image: {img_path}")
             resized_img = resize_image(img, max_size)
             save_image_and_meta(
                 resized_img, img_path, save_dir, ext, image_type, logger
@@ -596,6 +636,7 @@ def select_dataset_images_from_directory(
     # For additional filtering after obtaining dataset images
     duplicate_remover: Optional[DuplicateRemover] = None,
     logger: Optional[logging.Logger] = None,
+    invalid_image_handler: Optional[InvalidImageHandler] = None,
 ) -> None:
     """
     Select and process images from the specified directories for dataset creation.
@@ -668,7 +709,12 @@ def select_dataset_images_from_directory(
             halfbody_conf=detect_config,
         )
         logger.info(f"Performing 3 stage cropping for {classified_dir} ...")
-        source = LocalSource(classified_dir)
+        source = LocalSource(
+            classified_dir,
+            invalid_image_handler=invalid_image_handler,
+            stage=4,
+            source_type="intermediate",
+        )
         source.attach(
             crop_action,
         ).export(SaveExporter(classified_dir, in_place=True))
@@ -690,6 +736,7 @@ def select_dataset_images_from_directory(
         n_nocharacter_frames=n_reg,
         to_resize=to_resize,
         logger=logger,
+        invalid_image_handler=invalid_image_handler,
     )
     remove_empty_folders(dst_dir)
 

@@ -9,7 +9,7 @@ requirements = []
 # Package (minimal) configuration
 setup(
     name="anime2sd",
-    version="0.0.2",
+    version="0.0.3",
     description="pipeline for anime all in one sd model",
     package_dir={"": "."},
     packages=find_packages(),  # __init__.py folders search

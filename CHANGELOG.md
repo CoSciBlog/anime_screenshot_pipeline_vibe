@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.0.3 - 2026-08-20
+
+### Fixed
+
+- Prevented truncated, corrupt, and unreadable image files from aborting the pipeline; confirmed invalid inputs are skipped and can be moved to quarantine.
+- Hardened Stage 3 reference and dataset feature extraction without misclassifying CCIP, ONNX, CUDA, memory, or other model/runtime failures as corrupt images.
+- Preserved reference-label alignment after invalid reference images are removed and added clear errors when no valid references remain.
+- Kept `tqdm` output readable by using compact invalid-image warnings instead of repeated expected-error tracebacks.
+
+### Added
+
+- Added a central, thread-safe invalid-image handler with collision-safe quarantine paths, relative source structure preservation, move-failure handling, and per-stage counters.
+- Added append-only `invalid_images.log` and `invalid_images.jsonl` records under the configured log directory.
+- Added per-stage timing/invalid-image summaries and a final pipeline completion summary with per-character recognized-image counts.
+- Added safe defaults and GUI controls for continuing after invalid images, quarantine behavior and location, and invalid-image logging.
+- Added a browser **Reconnect live run** action plus periodic state synchronization so a reloaded page can recover the current status, progress bar, and live log while the background run continues.
+- Added focused tests for valid, truncated, malformed, colliding, move-failure, non-image CCIP-error, and mixed-reference cases.
+- Updated the package version to `0.0.3`.
+
 ## 0.0.2 - 2026-07-12
 
 - Added a terminal `INFO` message when the Gradio UI configuration is saved, and color-highlighted mirrored UI terminal severity lines for `INFO`, `WARNING`, `ERROR`, and `CRITICAL`.

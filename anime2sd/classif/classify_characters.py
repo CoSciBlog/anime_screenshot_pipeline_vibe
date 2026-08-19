@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import List, Tuple, Dict, Optional
 from hbutils.string import plural_word
 
@@ -10,6 +11,7 @@ from imgutils.metrics import ccip_batch_differences
 
 from ..basics import remove_empty_folders
 from ..character import Character
+from ..invalid_images import InvalidImageHandler
 
 from .file_utils import (
     limit_recognized_character_images,
@@ -370,6 +372,7 @@ def classify_from_directory(
     classification_chunk_size: int = 4096,
     move: bool = False,
     logger: Optional[logging.Logger] = None,
+    invalid_image_handler: Optional[InvalidImageHandler] = None,
 ):
     """
     Classify images from src_dir to dst_dir
@@ -441,8 +444,24 @@ def classify_from_directory(
         characters_per_image,
         character_mapping,
     ) = load_image_features_and_characters(
-        src_dir, tqdm_desc="Extract dataset features", logger=logger
+        src_dir,
+        tqdm_desc="Extract dataset features",
+        logger=logger,
+        invalid_image_handler=invalid_image_handler,
+        stage=3,
+        source_type="dataset",
+        source_root=src_dir,
     )
+    if len(image_files) == 0:
+        invalid_count = (
+            invalid_image_handler.invalid_count(3, "dataset")
+            if invalid_image_handler is not None
+            else 0
+        )
+        raise RuntimeError(
+            "Stage 3 cannot continue. 0 valid dataset images remain after "
+            f"validation. {invalid_count} invalid dataset image(s) were skipped."
+        )
 
     if ignore_character_metadata:
         characters_per_image = None
@@ -456,12 +475,60 @@ def classify_from_directory(
     if ref_dir is not None:
         ref_image_files, ref_labels_tmp, ref_characters = parse_ref_dir(ref_dir)
         if ref_image_files:
-            ref_images = load_image_features_and_characters(
+            (
+                valid_ref_image_files,
+                ref_images,
+                _ref_characters_per_image,
+                _ref_metadata_characters,
+            ) = load_image_features_and_characters(
                 image_files=ref_image_files,
                 tqdm_desc="Extract reference features",
                 logger=logger,
-            )[1]
-            ref_labels = ref_labels_tmp
+                invalid_image_handler=invalid_image_handler,
+                stage=3,
+                source_type="reference",
+                source_root=ref_dir,
+                validate_before_processing=True,
+            )
+            labels_by_path = {
+                os.path.normcase(os.path.abspath(path)): int(label)
+                for path, label in zip(ref_image_files, ref_labels_tmp)
+            }
+            ref_labels = np.array(
+                [
+                    labels_by_path[os.path.normcase(os.path.abspath(str(path)))]
+                    for path in valid_ref_image_files
+                ],
+                dtype=int,
+            )
+            valid_ref_labels = set(ref_labels.tolist())
+            for label, character in ref_characters.items():
+                if label not in valid_ref_labels:
+                    logger.warning(
+                        "Character has no valid reference images remaining: %s",
+                        character.to_string(caption_style=False),
+                    )
+            ref_characters = {
+                label: character
+                for label, character in ref_characters.items()
+                if label in valid_ref_labels
+            }
+            if len(valid_ref_image_files) == 0:
+                invalid_count = (
+                    invalid_image_handler.invalid_count(3, "reference")
+                    if invalid_image_handler is not None
+                    else len(ref_image_files)
+                )
+                quarantine_path = (
+                    invalid_image_handler.quarantine_root / "stage_3" / "ref"
+                    if invalid_image_handler is not None
+                    else "the configured quarantine directory"
+                )
+                raise RuntimeError(
+                    "Stage 3 cannot continue. 0 valid reference images remain "
+                    f"after validation. {invalid_count} invalid reference image(s) "
+                    f"were skipped. Check: {quarantine_path}"
+                )
             # Merge class names and update ref_labels and characters_per_image
             character_mapping, ref_labels, characters_per_image = merge_characters(
                 character_mapping, ref_characters, ref_labels, characters_per_image
@@ -563,7 +630,7 @@ def classify_from_directory(
         logger=logger,
     )
 
-    save_to_dir(
+    character_counts = save_to_dir(
         image_files,
         images,
         dst_dir,
@@ -573,3 +640,4 @@ def classify_from_directory(
         logger=logger,
     )
     remove_empty_folders(src_dir)
+    return character_counts

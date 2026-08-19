@@ -18,6 +18,7 @@ from .captioning import CaptionGenerator
 from ..emb_utils import update_emb_init_info
 from ..character import Character
 from ..waifuc_customize import LocalSource, SaveExporter
+from ..invalid_images import InvalidImageHandler
 
 
 class TaggingManager(object):
@@ -183,6 +184,7 @@ def tag_and_caption_from_directory(
     caption_generator: CaptionGenerator,
     save_aux: List[str],
     logger: Optional[logging.Logger] = None,
+    invalid_image_handler: Optional[InvalidImageHandler] = None,
 ):
     """
     Processes images in a directory for tagging and captioning.
@@ -208,7 +210,12 @@ def tag_and_caption_from_directory(
     if logger is None:
         logger = logging.getLogger()
 
-    source = LocalSource(dir)
+    source = LocalSource(
+        dir,
+        invalid_image_handler=invalid_image_handler,
+        stage=5,
+        source_type="source",
+    )
     source = source.attach(
         tagging_manager.get_tagging_action(),
         # Maybe it makes more sense to deal with process_from_original_tags here
@@ -315,6 +322,7 @@ def tag_and_caption_from_directory_core_final(
     caption_generator: CaptionGenerator,
     save_aux: List[str],
     logger: Optional[logging.Logger] = None,
+    invalid_image_handler: Optional[InvalidImageHandler] = None,
 ):
     """
     Final stage of captioning when prune_mode is 'character_core'.
@@ -336,7 +344,12 @@ def tag_and_caption_from_directory_core_final(
     if logger is None:
         logger = logging.getLogger()
 
-    source = LocalSource(dir)
+    source = LocalSource(
+        dir,
+        invalid_image_handler=invalid_image_handler,
+        stage=5,
+        source_type="source",
+    )
     core_tag_processor = CoreTagProcessor(
         core_tag_path=core_tag_path,
         logger=logger,

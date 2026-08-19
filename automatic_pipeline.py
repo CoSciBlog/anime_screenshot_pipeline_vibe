@@ -4,6 +4,7 @@ import copy
 import shutil
 import logging
 import argparse
+import time
 from datetime import datetime
 
 import asyncio
@@ -38,6 +39,7 @@ from anime2sd.execution_ordering import (
 from anime2sd.parse_arguments import parse_arguments
 from anime2sd.waifuc_customize import LocalSource, SaveExporter
 from anime2sd.waifuc_customize import MinFaceCountAction, MinHeadCountAction
+from anime2sd.invalid_images import InvalidImageHandler
 
 
 PERSON_DETECTION_VERSION_BY_LEVEL = {
@@ -208,6 +210,8 @@ def extract_frames_and_or_remove_similar(args, stage, logger):
             threshold=args.similar_thresh,
             dataloader_batch_size=args.detect_duplicate_batch_size,
             logger=logger,
+            invalid_image_handler=getattr(args, "_invalid_image_handler", None),
+            stage=1,
         )
 
     if args.pipeline_type == "screenshots":
@@ -239,7 +243,12 @@ def crop_characters(args, stage, logger):
     dst_dir = get_and_create_dst_dir(args, "intermediate", "cropped")
     logger.info(f"Detecting and cropping individual characters to {dst_dir} ...")
 
-    source = LocalSource(src_dir)
+    source = LocalSource(
+        src_dir,
+        invalid_image_handler=getattr(args, "_invalid_image_handler", None),
+        stage=2,
+        source_type="source",
+    )
     detect_config_person = person_detection_config(args.detect_level)
     if args.detect_level in ["s", "n"]:
         detect_level_head_halfbody = args.detect_level
@@ -296,7 +305,7 @@ def classify_characters(args, stage, logger):
     logger.info(f"Classifying characters to {dst_dir} ...")
 
     # Call the `classify_from_directory` function with the specified parameters.
-    classify_from_directory(
+    character_counts = classify_from_directory(
         src_dir,
         dst_dir,
         ref_dir=args.character_ref_dir,
@@ -315,6 +324,7 @@ def classify_characters(args, stage, logger):
         classification_chunk_size=args.classification_chunk_size,
         move=move,
         logger=logger,
+        invalid_image_handler=getattr(args, "_invalid_image_handler", None),
     )
     if args.remove_classified_aux_files and args.end_stage < 4:
         cleanup_classified_aux_files(dst_dir, logger)
@@ -322,6 +332,7 @@ def classify_characters(args, stage, logger):
         cleanup_stage2_crops_after_classification(args, src_dir, logger)
     if args.remove_noise_folder_after_classification:
         cleanup_noise_folder_after_classification(dst_dir, logger)
+    return character_counts
 
 
 def cleanup_classified_aux_files(classified_dir, logger):
@@ -481,6 +492,8 @@ def select_dataset_images(args, stage, logger):
             threshold=args.similar_thresh,
             dataloader_batch_size=args.detect_duplicate_batch_size,
             logger=logger,
+            invalid_image_handler=getattr(args, "_invalid_image_handler", None),
+            stage=4,
         )
     else:
         duplicate_remover = None
@@ -512,6 +525,7 @@ def select_dataset_images(args, stage, logger):
         # For additional filtering after obtaining dataset images
         duplicate_remover=duplicate_remover,
         logger=logger,
+        invalid_image_handler=getattr(args, "_invalid_image_handler", None),
     )
     if args.remove_classified_aux_files:
         cleanup_classified_aux_files(classified_dir, logger)
@@ -590,6 +604,7 @@ async def tag_and_caption(
         caption_generator,
         args.save_aux,
         logger,
+        getattr(args, "_invalid_image_handler", None),
     )
     stage_events[config_index]["5_phase1"].set()
 
@@ -638,6 +653,7 @@ async def tag_and_caption(
             caption_generator,
             args.save_aux,
             logger,
+            getattr(args, "_invalid_image_handler", None),
         )
 
 
@@ -685,7 +701,12 @@ def balance(args, stage, logger):
 
 def common_preprocess(args, logger):
     """Common preprocessing at the beginning of the pipeline."""
-    rearrange_related_files(args.src_dir, logger)
+    rearrange_related_files(
+        args.src_dir,
+        logger,
+        invalid_image_handler=getattr(args, "_invalid_image_handler", None),
+        stage=args.start_stage,
+    )
     if args.load_grabber_ext or args.load_aux or args.overwrite_path:
         if args.character_info_file and os.path.exists(args.character_info_file):
             character_mapping = read_class_mapping(args.character_info_file)
@@ -698,6 +719,8 @@ def common_preprocess(args, logger):
             args.overwrite_path,
             character_mapping,
             logger=logger,
+            invalid_image_handler=getattr(args, "_invalid_image_handler", None),
+            stage=args.start_stage,
         )
 
 
@@ -714,7 +737,7 @@ def run_stage(config, stage_num, logger):
         7: balance,
     }
 
-    STAGE_FUNCTIONS[stage_num](config, stage_num, logger)
+    return STAGE_FUNCTIONS[stage_num](config, stage_num, logger)
 
 
 async def run_pipeline(config, config_index, execution_config, stage_events, executor):
@@ -723,6 +746,11 @@ async def run_pipeline(config, config_index, execution_config, stage_events, exe
         f"{config.image_type}_{config.log_prefix}",
         f"pipeline_{config_index}",
     )
+    invalid_image_handler = InvalidImageHandler.from_config(config, logger)
+    config._invalid_image_handler = invalid_image_handler
+    pipeline_started = time.monotonic()
+    completed_stages = []
+    character_counts = {}
 
     # Rearranging related files from multiple threads could be problematic if
     # the folders have overlap. We assume this is not the case.
@@ -767,19 +795,44 @@ async def run_pipeline(config, config_index, execution_config, stage_events, exe
         loop = asyncio.get_running_loop()
 
         logger.info(f"-------------Start stage {stage_num}-------------")
-        if stage_num == 5:
-            await tag_and_caption(
-                config,
-                stage_num,
-                config_index,
-                execution_config,
-                stage_events,
-                executor,
-                logger,
+        stage_started = time.monotonic()
+        try:
+            if stage_num == 5:
+                stage_result = await tag_and_caption(
+                    config,
+                    stage_num,
+                    config_index,
+                    execution_config,
+                    stage_events,
+                    executor,
+                    logger,
+                )
+            else:
+                stage_result = await loop.run_in_executor(
+                    executor, run_stage, config, stage_num, logger
+                )
+        except Exception:
+            invalid_image_handler.log_stage_summary(
+                stage_num, time.monotonic() - stage_started, success=False
             )
-        else:
-            await loop.run_in_executor(executor, run_stage, config, stage_num, logger)
+            logger.exception(
+                "[ERROR] Stage %d failed because of a critical non-recoverable error.",
+                stage_num,
+            )
+            raise
+        invalid_image_handler.log_stage_summary(
+            stage_num, time.monotonic() - stage_started
+        )
+        completed_stages.append(stage_num)
+        if stage_num == 3 and stage_result:
+            character_counts.update(stage_result)
         stage_events[config_index][stage_num].set()
+
+    invalid_image_handler.log_pipeline_summary(
+        completed_stages,
+        time.monotonic() - pipeline_started,
+        character_counts,
+    )
 
 
 async def main(configs):

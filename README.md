@@ -25,6 +25,7 @@ The Frame Lab UI in `app/gradio_ui.py` exposes the existing pipeline as a local 
 - The General settings include post-run cleanup checkboxes for deleting source contents, destination metadata, and reference metadata only after the full selected pipeline completes successfully. They are disabled by default; image files are preserved for the destination and reference metadata cleanup options.
 - **Stop pipeline** cancels the active UI run and terminates its pipeline process tree without closing the web interface.
 - A live status message and progress bar show the active stage and completed selected stages. Progress output is deduplicated in the web log and mirrored in the launching terminal; terminal severity lines are color-highlighted for easier scanning.
+- **Reconnect live run** restores the process-wide status, progress bar, and recent run log after a browser reload. The UI also refreshes this shared state periodically while the background pipeline continues independently of the original browser session.
 - **Shut down server**, placed below the stage settings at the end of the page, requests confirmation before it terminates an active pipeline and closes the local Gradio server completely.
 
 The UI listens only on `http://127.0.0.1:7866`. Port `7866` is intentionally fixed for repeatable bookmarks and Pinokio integration. Close another service using that port before launching Frame Lab.
@@ -39,6 +40,7 @@ C:\datasets\anime\frieren_project\
 |-- src\                 # Input for the first enabled stage
 |-- ref\                 # Character reference images for Stage 3
 |-- logs\                # Pipeline log files
+|-- quarantine\          # Invalid inputs, grouped by stage and source
 `-- dst\                 # Created only after a stage emits output
     |-- intermediate\    # Generated raw, cropped, and classified working data
     `-- training\        # Final selected and captioned training data
@@ -59,6 +61,43 @@ dst\intermediate\screenshots\classified\frieren\
 ```
 
 When preprocessing encounters legacy `.json` or `.npy` sidecars beside an input image, it relocates those existing files to the matching `metadata` child directory without deleting image data.
+
+### Invalid Images and Quarantine
+
+Version 0.0.3 validates image data at the point where it is decoded. A confirmed Pillow decode failure such as `UnidentifiedImageError`, `OSError: image file is truncated`, or `EOFError` no longer aborts the remaining batch by default. The file is skipped, logged once, and moved out of the active dataset. The global Pillow option `LOAD_TRUNCATED_IMAGES` is not enabled, so partial image data is never accepted for character embeddings.
+
+With the default `auto` location, a workspace uses this layout while retaining the path relative to the relevant source root:
+
+```text
+C:\datasets\anime\frieren_project\quarantine\
+|-- stage_2\
+|   `-- src\...
+|-- stage_3\
+|   |-- ref\frieren\bad_reference.jpg
+|   `-- src\S01E03\bad_crop.png
+`-- stage_4\
+    `-- src\...
+```
+
+Existing quarantine files are never overwritten; collisions receive `_001`, `_002`, and later suffixes. If a move fails because a file is locked, inaccessible, or on an unavailable path, the pipeline reports both the original decode error and the move error and still skips that input for the current run. Different configured workspaces resolve to separate automatic quarantine roots.
+
+The General UI section and TOML/CLI configuration expose these backwards-compatible defaults:
+
+```toml
+[error_handling]
+continue_on_invalid_image = true
+quarantine_invalid_images = true
+quarantine_dir = "auto"
+invalid_image_log = true
+```
+
+The matching CLI flags are `--continue_on_invalid_image` / `--no-continue_on_invalid_image`, `--quarantine_invalid_images` / `--no-quarantine_invalid_images`, `--quarantine_dir`, and `--invalid_image_log` / `--no-invalid_image_log`.
+
+Problem files are appended immediately to `<log_dir>/invalid_images.log` and `<log_dir>/invalid_images.jsonl`. JSONL keeps every completed record valid even if a later critical error stops the process. Each record contains the timestamp, stage, operation, source type, full original path, quarantine destination, exception details, and move result.
+
+Stage 3 validates reference files before extracting CCIP features. If one character loses all references, that character is reported and omitted while other characters continue. If no valid reference image remains at all, Stage 3 stops with a direct explanation and quarantine path. A CCIP/ONNX/CUDA failure on an image that Pillow can fully decode remains a critical error and is not quarantined.
+
+After reviewing quarantined files, replace or repair them in the original source/reference structure and rerun the affected stage. Do not copy a file back until a full Pillow decode or another trusted image validator succeeds.
 
 ### Character Detection Models
 
@@ -132,6 +171,8 @@ Pipeline and UI terminal messages use severity colors:
 - `WARNING` is yellow.
 - `ERROR` is red.
 - `CRITICAL` is bold red.
+- `[OK]` completion messages are green.
+- `[SUMMARY]` blocks are highlighted in bold cyan.
 
 Saving the UI configuration also prints an `INFO` line in the launching terminal with the saved TOML path. Color codes are omitted from the Gradio run log. Set `NO_COLOR=1` to disable ANSI coloring in the terminal.
 
@@ -194,16 +235,21 @@ The UI controls are also exposed as named API endpoints:
 
 ```python
 client.predict(api_name="/stop_pipeline")
+status_html, progress_html, recent_log = client.predict(
+    "en", api_name="/reconnect_pipeline"
+)
 client.predict(api_name="/shutdown_server")
 ```
 
 ```javascript
 await app.predict("/stop_pipeline", []);
+const liveState = await app.predict("/reconnect_pipeline", ["en"]);
 await app.predict("/shutdown_server", []);
 ```
 
 ```bash
 curl -X POST "http://127.0.0.1:7866/call/stop_pipeline" -H "Content-Type: application/json" -d '{"data":[]}'
+curl -X POST "http://127.0.0.1:7866/call/reconnect_pipeline" -H "Content-Type: application/json" -d '{"data":["en"]}'
 curl -X POST "http://127.0.0.1:7866/call/shutdown_server" -H "Content-Type: application/json" -d '{"data":[]}'
 ```
 

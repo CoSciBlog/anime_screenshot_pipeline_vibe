@@ -11,6 +11,7 @@ from anime2sd.basics import (
     get_default_metadata,
 )
 from anime2sd.waifuc_customize import LocalSource, SaveExporter, TagRenameAction
+from anime2sd.invalid_images import EXPECTED_IMAGE_ERRORS, InvalidImageHandler
 
 
 def construct_file_list(src_dir: str):
@@ -32,7 +33,12 @@ def construct_file_list(src_dir: str):
     return all_files
 
 
-def rearrange_related_files(src_dir: str, logger: Optional[logging.Logger] = None):
+def rearrange_related_files(
+    src_dir: str,
+    logger: Optional[logging.Logger] = None,
+    invalid_image_handler: Optional[InvalidImageHandler] = None,
+    stage: int = 0,
+):
     """
     Rearrange related files in some directory.
 
@@ -48,26 +54,39 @@ def rearrange_related_files(src_dir: str, logger: Optional[logging.Logger] = Non
 
     logger.info("Arranging related files ...")
     for img_path in tqdm(image_files, desc="Rearranging related files"):
-        related_paths = get_related_paths(img_path)
-        for related_path in related_paths:
-            # If the related file does not exist in the expected location
-            if not os.path.exists(related_path):
-                # Search for the file in the all_files dictionary
-                found_path = all_files.get(os.path.basename(related_path))
-                if found_path is None:
-                    if related_path.endswith("json"):
-                        meta_data = get_default_metadata(img_path)
+        try:
+            related_paths = get_related_paths(img_path)
+            for related_path in related_paths:
+                # If the related file does not exist in the expected location
+                if not os.path.exists(related_path):
+                    # Search for the file in the all_files dictionary
+                    found_path = all_files.get(os.path.basename(related_path))
+                    if found_path is None:
+                        if related_path.endswith("json"):
+                            meta_data = get_default_metadata(img_path)
+                            os.makedirs(os.path.dirname(related_path), exist_ok=True)
+                            with open(related_path, "w") as f:
+                                json.dump(meta_data, f)
+                            default_metadata_count += 1
+                    else:
+                        # Move the found file to the expected location
                         os.makedirs(os.path.dirname(related_path), exist_ok=True)
-                        with open(related_path, "w") as f:
-                            json.dump(meta_data, f)
-                        default_metadata_count += 1
-                else:
-                    # Move the found file to the expected location
-                    os.makedirs(os.path.dirname(related_path), exist_ok=True)
-                    shutil.move(found_path, related_path)
-                    logger.info(
-                        f"Moved related file from {found_path} " f"to {related_path}"
-                    )
+                        shutil.move(found_path, related_path)
+                        logger.info(
+                            f"Moved related file from {found_path} " f"to {related_path}"
+                        )
+        except EXPECTED_IMAGE_ERRORS as exc:
+            if invalid_image_handler is None:
+                raise
+            invalid_image_handler.record_attempt(stage)
+            invalid_image_handler.handle_invalid_image(
+                img_path,
+                exc,
+                stage=stage,
+                operation="initialize_image_metadata",
+                source_type="source",
+                source_root=src_dir,
+            )
     if default_metadata_count:
         logger.info(
             "Created default metadata for %d image(s) without existing metadata.",
@@ -82,6 +101,8 @@ def load_metadata_from_aux(
     overwrite_path: bool,
     character_mapping: Optional[Dict[str, str]],
     logger: Optional[logging.Logger] = None,
+    invalid_image_handler: Optional[InvalidImageHandler] = None,
+    stage: int = 0,
 ) -> None:
     """
     Load metadata from auxiliary data and export it with potential modifications.
@@ -110,6 +131,9 @@ def load_metadata_from_aux(
         load_grabber_ext=load_grabber_ext,
         load_aux=load_aux,
         overwrite_path=overwrite_path,
+        invalid_image_handler=invalid_image_handler,
+        stage=stage,
+        source_type="source",
     )
     if character_mapping:
         # Renaming characters

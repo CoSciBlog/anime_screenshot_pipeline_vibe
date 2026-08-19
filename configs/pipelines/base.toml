@@ -27,6 +27,17 @@ remove_intermediate = false
 # Remove files inside src_dir after the full selected pipeline finishes successfully
 remove_src_files_after_pipeline = false
 
+# Invalid Image Error Handling
+[error_handling]
+# Continue after a file is confirmed to be corrupt or unreadable
+continue_on_invalid_image = true
+# Move confirmed invalid files out of the active dataset
+quarantine_invalid_images = true
+# "auto" creates a quarantine folder in the inferred workspace root
+quarantine_dir = "auto"
+# Write logs/invalid_images.log and logs/invalid_images.jsonl
+invalid_image_log = true
+
 # Metadata Loading and Saving
 [metadata_handling]
 # Extension of the grabber information files to load. Attributes from this file would overwrite those loaded from --load_aux.

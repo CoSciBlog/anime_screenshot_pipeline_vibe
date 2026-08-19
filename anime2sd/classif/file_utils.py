@@ -20,6 +20,11 @@ from ..basics import (
     random_string,
 )
 from ..character import Character
+from ..invalid_images import (
+    EXPECTED_IMAGE_ERRORS,
+    InvalidImageHandler,
+    validate_image,
+)
 
 
 _EPISODE_PATTERN = re.compile(r"(s\d{1,3}e\d{1,4})", re.IGNORECASE)
@@ -85,6 +90,11 @@ def load_image_features_and_characters(
     save_ccip_cache: bool = True,
     tqdm_desc: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
+    invalid_image_handler: Optional[InvalidImageHandler] = None,
+    stage: int = 3,
+    source_type: str = "dataset",
+    source_root: Optional[str] = None,
+    validate_before_processing: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray], Dict[int, Character]]:
     """Load image features and associated character information
     from a given source directory.
@@ -119,7 +129,7 @@ def load_image_features_and_characters(
         src_dir is not None or image_files is not None
     ), "Either src_dir or image_files must be provided."
 
-    if image_files:
+    if image_files is not None:
         image_files = np.array(image_files)
     else:
         image_files = np.array(natsorted(get_images_recursively(src_dir)))
@@ -130,14 +140,60 @@ def load_image_features_and_characters(
     character_to_index = {}  # Mapping from character name to label index
     index_to_character = {}  # Mapping from label index to character name
     label_counter = 0
+    valid_image_files = []
 
     # Iterate over image files to extract features and metadata
     for img_path in tqdm(image_files, desc=tqdm_desc):
+        if invalid_image_handler is not None:
+            if validate_before_processing:
+                if not invalid_image_handler.try_validate(
+                    img_path,
+                    stage=stage,
+                    operation=f"validate_{source_type}_image",
+                    source_type=source_type,
+                    source_root=source_root or src_dir,
+                ):
+                    continue
+            else:
+                invalid_image_handler.record_attempt(stage)
         ccip_path, _ = get_corr_ccip_names(img_path)
         if os.path.exists(ccip_path):
+            if invalid_image_handler is not None and not validate_before_processing:
+                try:
+                    validate_image(img_path)
+                except EXPECTED_IMAGE_ERRORS as decode_error:
+                    invalid_image_handler.handle_invalid_image(
+                        img_path,
+                        decode_error,
+                        stage=stage,
+                        operation=f"validate_cached_{source_type}_image",
+                        source_type=source_type,
+                        source_root=source_root or src_dir,
+                    )
+                    continue
             images.append(np.load(ccip_path))
         else:
-            img_embedding = ccip_extract_feature(img_path)
+            try:
+                img_embedding = ccip_extract_feature(img_path)
+            except EXPECTED_IMAGE_ERRORS as feature_error:
+                # OSError may also originate from ONNX/CUDA/model code.  Only
+                # quarantine when an independent full decode confirms that the
+                # input file itself is invalid.
+                try:
+                    validate_image(img_path)
+                except EXPECTED_IMAGE_ERRORS as decode_error:
+                    if invalid_image_handler is None:
+                        raise feature_error
+                    invalid_image_handler.handle_invalid_image(
+                        img_path,
+                        decode_error,
+                        stage=stage,
+                        operation=f"extract_{source_type}_feature",
+                        source_type=source_type,
+                        source_root=source_root or src_dir,
+                    )
+                    continue
+                raise
             images.append(img_embedding)
             if save_ccip_cache:
                 os.makedirs(os.path.dirname(ccip_path), exist_ok=True)
@@ -157,7 +213,11 @@ def load_image_features_and_characters(
                             label_counter += 1
                         characters.append(character_to_index[character])
         characters_list.append(characters)
+        valid_image_files.append(img_path)
+        if invalid_image_handler is not None and not validate_before_processing:
+            invalid_image_handler.record_success(stage)
 
+    image_files = np.array(valid_image_files)
     images = np.array(images)
 
     # Initialize characters_per_image only if there are characters found
@@ -205,7 +265,16 @@ def parse_ref_dir(
     label_counter = 0
 
     # Supported image extensions
-    image_extensions = [".png", ".jpg", ".jpeg", ".webp", ".gif"]
+    image_extensions = [
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".gif",
+        ".bmp",
+        ".tif",
+        ".tiff",
+    ]
 
     for root, dirs, files in os.walk(ref_dir):
         dirs[:] = [directory for directory in dirs if directory != METADATA_DIRNAME]
@@ -255,7 +324,7 @@ def save_to_dir(
     character_mapping: Optional[Dict[int, Character]] = None,
     move: bool = False,
     logger: Optional[logging.Logger] = None,
-) -> None:
+) -> Dict[str, int]:
     """
     Save or move image files to a destination directory, organized into
     subdirectories by label.
@@ -284,9 +353,10 @@ def save_to_dir(
     logger.info(f"Saving classified images to {dst_dir} ...")
     if len(labels) == 0:
         logger.info("No classified images to save.")
-        return
+        return {}
 
     unique_labels = sorted(set(labels))
+    saved_counts: Dict[str, int] = {}
     os.makedirs(dst_dir, exist_ok=True)
     for label in unique_labels:
         if character_mapping and label in character_mapping:
@@ -301,6 +371,8 @@ def save_to_dir(
 
         os.makedirs(os.path.join(dst_dir, folder_name), exist_ok=True)
         total = (labels == label).sum()
+        if character_mapping and label in character_mapping:
+            saved_counts[folder_name] = int(total)
         logger.info(f'class {folder_name} has {plural_word(total, "image")} in total.')
 
         for img_path, img in zip(image_files[labels == label], images[labels == label]):
@@ -339,3 +411,4 @@ def save_to_dir(
                 shutil.move(img_path, img_path_dst)
             else:
                 shutil.copy(img_path, img_path_dst)
+    return saved_counts

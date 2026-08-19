@@ -112,6 +112,41 @@ def create_parser():
         ),
     )
     parser.add_argument(
+        "--continue_on_invalid_image",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Continue the current stage after a confirmed corrupt or unreadable "
+            "image is skipped. Disable to stop after recording the invalid file."
+        ),
+    )
+    parser.add_argument(
+        "--quarantine_invalid_images",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Move confirmed invalid images into the workspace quarantine while "
+            "preserving their relative source structure."
+        ),
+    )
+    parser.add_argument(
+        "--quarantine_dir",
+        type=str,
+        default="auto",
+        help=(
+            "Quarantine root directory. 'auto' creates <workspace>/quarantine."
+        ),
+    )
+    parser.add_argument(
+        "--invalid_image_log",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Append invalid-image details to logs/invalid_images.log and "
+            "logs/invalid_images.jsonl."
+        ),
+    )
+    parser.add_argument(
         "--remove_src_files_after_pipeline",
         action="store_true",
         help=(

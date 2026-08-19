@@ -11,6 +11,16 @@ from pathlib import Path
 
 
 METADATA_DIRNAME = "metadata"
+SUPPORTED_IMAGE_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".bmp",
+    ".tif",
+    ".tiff",
+}
 
 
 def parse_anime_info(filename: str) -> tuple:
@@ -153,21 +163,11 @@ def get_images_recursively(folder_path):
     Returns:
     - list: A list of image paths.
     """
-    allowed_patterns = [
-        "*.[Pp][Nn][Gg]",
-        "*.[Jj][Pp][Gg]",
-        "*.[Jj][Pp][Ee][Gg]",
-        "*.[Ww][Ee][Bb][Pp]",
-        "*.[Gg][Ii][Ff]",
-    ]
-
-    image_path_list = [
+    return [
         str(path)
-        for pattern in allowed_patterns
-        for path in Path(folder_path).rglob(pattern)
+        for path in Path(folder_path).rglob("*")
+        if path.is_file() and path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
     ]
-
-    return image_path_list
 
 
 def get_files_recursively(folder_path):

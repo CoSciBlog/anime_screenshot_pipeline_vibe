@@ -35,6 +35,8 @@ PIPELINE_PROCESS_LOCK = threading.Lock()
 PIPELINE_RUN_LOCK = threading.Lock()
 PIPELINE_STOP_REQUESTED = threading.Event()
 ACTIVE_PIPELINE_PROCESS: subprocess.Popen[str] | None = None
+PIPELINE_STATE_LOCK = threading.RLock()
+PIPELINE_RUN_STATE: dict[str, str] = {}
 WORKSPACE_DIRECTORIES = ("src", "ref", "logs")
 WORKSPACE_RESERVED_DIRECTORIES = (*WORKSPACE_DIRECTORIES, "dst")
 ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
@@ -45,6 +47,8 @@ TERMINAL_SEVERITY_COLORS = {
     "WARNING": "\033[33m",
     "ERROR": "\033[31m",
     "CRITICAL": "\033[1;31m",
+    "SUMMARY": "\033[1;36m",
+    "OK": "\033[32m",
 }
 TERMINAL_RESET = "\033[0m"
 STAGE_START_RE = re.compile(r"Start stage\s+(\d+)")
@@ -124,6 +128,10 @@ FIELD_GROUPS = OrderedDict(
                 "extra_path_component",
                 "log_dir",
                 "log_prefix",
+                "continue_on_invalid_image",
+                "quarantine_invalid_images",
+                "quarantine_dir",
+                "invalid_image_log",
                 "pipeline_type",
                 "image_type",
                 "remove_intermediate",
@@ -290,6 +298,7 @@ PATH_FIELDS = {
     "overlap_tags_file",
     "character_tags_file",
     "weight_csv",
+    "quarantine_dir",
 }
 FIELD_GUIDANCE = {
     "src_dir": (
@@ -301,6 +310,10 @@ FIELD_GUIDANCE = {
         "Reference image root used only in Stage 3. Create one subfolder per character and place clear reference crops or portraits inside it, "
         r"for example <root>\ref\frieren\*.png. Better references reduce cluster mistakes."
     ),
+    "continue_on_invalid_image": "Keeps the pipeline running after a file is independently confirmed to be unreadable. Critical model, CUDA, ONNX, and programming errors still stop the run.",
+    "quarantine_invalid_images": "Moves confirmed invalid files out of the active dataset while preserving their relative folder structure and never overwriting an existing quarantine file.",
+    "quarantine_dir": r"Use 'auto' for <workspace>\quarantine, or enter a dedicated directory. Stage and source subfolders are created automatically.",
+    "invalid_image_log": "Writes an append-only readable log and JSONL record for every invalid image, including the original path, quarantine path, operation, and move result.",
     "candidate_submitters": "Use a narrow list for consistent encodes or a broader list when availability matters more than uniform video style.",
     "anime_resolution": "Higher resolutions preserve small faces and costume details, but downloads, frame extraction, and detection take longer.",
     "booru_download_limit": "More images improve coverage of poses and outfits, but they increase download time, filtering cost, and manual review volume.",
@@ -428,6 +441,7 @@ UI_TEXT = {
         "stage_guide": "Stage guide",
         "run_pipeline": "Run pipeline",
         "stop_pipeline": "Stop pipeline",
+        "reconnect_pipeline": "Reconnect live run",
         "ready": "Ready",
         "ready_message": "Select stages and run the pipeline.",
         "run_log": "Run log",
@@ -473,6 +487,7 @@ UI_TEXT = {
         "stage_guide": "Stage-Übersicht",
         "run_pipeline": "Pipeline starten",
         "stop_pipeline": "Pipeline stoppen",
+        "reconnect_pipeline": "Live-Lauf wieder verbinden",
         "ready": "Bereit",
         "ready_message": "Wähle Stages aus und starte die Pipeline.",
         "run_log": "Ausführungslog",
@@ -514,6 +529,10 @@ UI_TEXT = {
 }
 
 FIELD_GUIDANCE_DE = {
+    "continue_on_invalid_image": "Setzt die Pipeline nach einer eindeutig unlesbaren Datei fort. Kritische Modell-, CUDA-, ONNX- und Programmierfehler brechen weiterhin ab.",
+    "quarantine_invalid_images": "Verschiebt bestaetigte defekte Dateien mit relativer Ordnerstruktur aus dem aktiven Datensatz, ohne vorhandene Quarantaenedateien zu ueberschreiben.",
+    "quarantine_dir": r"'auto' verwendet <workspace>\quarantine; alternativ kann ein eigener Ordner gesetzt werden. Stage- und Quell-Unterordner entstehen automatisch.",
+    "invalid_image_log": "Schreibt pro defektem Bild ein lesbares Log und einen JSONL-Eintrag mit Originalpfad, Quarantaenepfad, Operation und Move-Ergebnis.",
     "src_dir": r"Quellordner für die erste aktivierte Stage. Je nach Startpunkt enthält er Videos, Rohbilder oder Zwischendaten. Mit Workspace-Stammordner wird er auf <root>\src gesetzt; Referenzbilder gehören nach ref.",
     "dst_dir": r"Ausgabe-Stammordner der Pipeline. Mit Workspace-Stammordner landen Zwischendaten unter <root>\dst\intermediate und Trainingsdaten unter <root>\dst\training.",
     "character_ref_dir": r"Referenzordner nur für Stage 3. Lege pro Charakter einen Unterordner an, z. B. <root>\ref\frieren\*.png. Gute Referenzen reduzieren falsche Cluster.",
@@ -842,6 +861,12 @@ def clean_value(value: Any) -> Any:
     return None if value == {} else value
 
 
+def is_boolean_action(action: argparse.Action) -> bool:
+    return isinstance(
+        action, (argparse._StoreTrueAction, argparse.BooleanOptionalAction)
+    )
+
+
 def defaults(include_screenshots: bool = True) -> dict[str, Any]:
     values = {action.dest: clean_value(action.default) for action in parser_actions()}
     paths = [ROOT / "configs" / "pipelines" / "base.toml"]
@@ -869,7 +894,7 @@ def display_value(action: argparse.Action, value: Any) -> Any:
     value = clean_value(value)
     if action.nargs in ("*", "+"):
         return text_for_list(value)
-    if isinstance(action, argparse._StoreTrueAction):
+    if is_boolean_action(action):
         return bool(value)
     return "" if value is None else value
 
@@ -893,7 +918,7 @@ def parse_list(value: str) -> list[str]:
 def config_value(action: argparse.Action, value: Any) -> Any:
     if action.nargs in ("*", "+"):
         return parse_list(str(value))
-    if isinstance(action, argparse._StoreTrueAction):
+    if is_boolean_action(action):
         return bool(value)
     if value == "" or value is None:
         return None
@@ -1083,6 +1108,32 @@ def progress_markup(
     )
 
 
+def remember_pipeline_state(result: tuple[str, str, str]) -> tuple[str, str, str]:
+    with PIPELINE_STATE_LOCK:
+        PIPELINE_RUN_STATE.update(
+            status=result[0], progress=result[1], log=result[2]
+        )
+    return result
+
+
+def reconnect_pipeline_state(
+    language: str | None = DEFAULT_LANGUAGE,
+) -> tuple[str, str, str]:
+    """Return the latest process-wide run state after a browser reload."""
+    with PIPELINE_STATE_LOCK:
+        if PIPELINE_RUN_STATE:
+            return (
+                PIPELINE_RUN_STATE["status"],
+                PIPELINE_RUN_STATE["progress"],
+                PIPELINE_RUN_STATE["log"],
+            )
+    return (
+        status_markup(ui_text(language, "ready"), ui_text(language, "ready_message")),
+        progress_markup([], set(), None, language=language),
+        "No pipeline run has been started in this server session.",
+    )
+
+
 def terminal_color_enabled() -> bool:
     return "NO_COLOR" not in os.environ
 
@@ -1090,10 +1141,16 @@ def terminal_color_enabled() -> bool:
 def colorize_terminal_line(line: str) -> str:
     if not terminal_color_enabled() or ANSI_ESCAPE_RE.search(line):
         return line
-    match = SEVERITY_RE.search(line)
-    if not match:
-        return line
-    color = TERMINAL_SEVERITY_COLORS.get(match.group(1))
+    if "[SUMMARY]" in line:
+        severity = "SUMMARY"
+    elif "[OK]" in line:
+        severity = "OK"
+    else:
+        match = SEVERITY_RE.search(line)
+        if not match:
+            return line
+        severity = match.group(1)
+    color = TERMINAL_SEVERITY_COLORS.get(severity)
     if not color:
         return line
     line_ending = "\n" if line.endswith("\n") else ""
@@ -1242,6 +1299,14 @@ def stop_pipeline() -> str:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         process.kill()
+    previous = reconnect_pipeline_state()
+    remember_pipeline_state(
+        (
+            status_markup("Pipeline stopped", "Processing was stopped by the user."),
+            previous[1],
+            previous[2] + "\nPipeline stopped by user.",
+        )
+    )
     return "Pipeline stopped."
 
 
@@ -1272,25 +1337,25 @@ def execute_config(stages: list[int], config: dict[str, Any]):
     clustering_started: float | None = None
 
     def update(title: str, message: str, history: list[str]):
-        return (
+        return remember_pipeline_state((
             status_markup(title, message),
             progress_markup(stages, completed, current_stage, detail),
             "\n".join(history),
-        )
+        ))
 
     if not stages:
-        yield (
+        yield remember_pipeline_state((
             status_markup("No stages selected", "Enable at least one stage before running."),
             progress_markup([], set(), None),
             "No stage selected. Enable at least one checkbox.",
-        )
+        ))
         return
     if not PIPELINE_RUN_LOCK.acquire(blocking=False):
-        yield (
+        yield remember_pipeline_state((
             status_markup("Pipeline already running", "Stop the active run before starting another."),
             progress_markup(stages, set(), None),
             "A pipeline run is already active. Stop it before starting another run.",
-        )
+        ))
         return
 
     PIPELINE_STOP_REQUESTED.clear()
@@ -1428,7 +1493,41 @@ def run_selected_stages(selected: list[str], workspace_root: str, *values: Any):
             )
             return
     config = apply_workspace_paths(workspace_root, build_config(values, ACTIONS))
-    yield from execute_config(stages, config)
+    if PIPELINE_RUN_LOCK.locked():
+        yield reconnect_pipeline_state()
+        return
+
+    def consume_pipeline() -> None:
+        try:
+            for result in execute_config(stages, config):
+                remember_pipeline_state(result)
+        except Exception as exc:
+            remember_pipeline_state(
+                (
+                    status_markup("Pipeline failed", "Review the run log for the reported error."),
+                    reconnect_pipeline_state()[1],
+                    reconnect_pipeline_state()[2] + f"\n{type(exc).__name__}: {exc}",
+                )
+            )
+
+    remember_pipeline_state(
+        (
+            status_markup("Pipeline starting", "Preparing the background pipeline process."),
+            progress_markup(stages, set(), None),
+            "Connecting to the background pipeline process...",
+        )
+    )
+    worker = threading.Thread(target=consume_pipeline, daemon=True)
+    worker.start()
+    last_result: tuple[str, str, str] | None = None
+    while worker.is_alive():
+        result = reconnect_pipeline_state()
+        if result != last_result:
+            last_result = result
+            yield result
+        time.sleep(0.25)
+    worker.join()
+    yield reconnect_pipeline_state()
 
 
 def run_saved_profile(config_path: str, stages_text: str):
@@ -1468,7 +1567,7 @@ def make_component(action: argparse.Action, value: Any, language: str | None = D
     label = f"--{action.dest}"
     info = setting_info(action, language)
     shown = component_value(action, value)
-    if isinstance(action, argparse._StoreTrueAction):
+    if is_boolean_action(action):
         return gr.Checkbox(label=label, value=shown, info=info)
     if action.choices:
         return gr.Dropdown(label=label, choices=list(action.choices), value=shown, info=info)
@@ -1536,6 +1635,7 @@ def interface_language_updates(language: str, selected: Iterable[Any] | None):
             gr.update(value=ui_text(language, "shutdown_confirm")),
             gr.update(value=ui_text(language, "cancel")),
             gr.update(value=ui_text(language, "confirm_shutdown")),
+            gr.update(value=ui_text(language, "reconnect_pipeline")),
         ]
     )
     return updates
@@ -1567,6 +1667,7 @@ def build_interface() -> gr.Blocks:
             with gr.Row():
                 run_button = gr.Button(ui_text(initial_language, "run_pipeline"), variant="primary")
                 stop_button = gr.Button(ui_text(initial_language, "stop_pipeline"), variant="stop")
+                reconnect_button = gr.Button(ui_text(initial_language, "reconnect_pipeline"))
             run_status = gr.HTML(
                 status_markup(ui_text(initial_language, "ready"), ui_text(initial_language, "ready_message"))
             )
@@ -1718,6 +1819,7 @@ def build_interface() -> gr.Blocks:
             shutdown_text,
             cancel_shutdown_button,
             confirm_shutdown_button,
+            reconnect_button,
         ]
         language_selector.change(
             interface_language_updates,
@@ -1751,6 +1853,23 @@ def build_interface() -> gr.Blocks:
             api_name="run_from_form",
             concurrency_limit=1,
             concurrency_id="pipeline_run",
+        )
+        reconnect_button.click(
+            reconnect_pipeline_state,
+            inputs=language_selector,
+            outputs=[run_status, stage_progress, output],
+            api_name="reconnect_pipeline",
+            concurrency_limit=None,
+            concurrency_id="pipeline_control",
+        )
+        live_timer = gr.Timer(value=1.0, active=True)
+        live_timer.tick(
+            reconnect_pipeline_state,
+            inputs=language_selector,
+            outputs=[run_status, stage_progress, output],
+            concurrency_limit=None,
+            concurrency_id="pipeline_control",
+            show_progress="hidden",
         )
         stop_button.click(
             stop_pipeline,

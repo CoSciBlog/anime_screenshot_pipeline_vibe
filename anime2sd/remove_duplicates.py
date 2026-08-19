@@ -13,6 +13,7 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
 from .basics import get_related_paths, get_images_recursively
+from .invalid_images import InvalidImageHandler
 
 
 class ImageDataset(Dataset):
@@ -45,7 +46,13 @@ class ImageDataset(Dataset):
         return image_path, image
 
     @classmethod
-    def from_directory(cls, dataset_dir: str, transform: callable):
+    def from_directory(
+        cls,
+        dataset_dir: str,
+        transform: callable,
+        invalid_image_handler: Optional[InvalidImageHandler] = None,
+        stage: int = 1,
+    ):
         """
         Creates an ImageDataset from a directory of images.
 
@@ -57,11 +64,28 @@ class ImageDataset(Dataset):
             ImageDataset: The constructed dataset.
         """
         image_paths = get_images_recursively(dataset_dir)
+        if invalid_image_handler is not None:
+            image_paths = [
+                path
+                for path in image_paths
+                if invalid_image_handler.try_validate(
+                    path,
+                    stage=stage,
+                    operation="duplicate_detection_decode",
+                    source_type="source",
+                    source_root=dataset_dir,
+                )
+            ]
         return cls(image_paths, transform)
 
     @classmethod
     def from_subdirectories(
-        cls, dataset_dir: str, transform: callable, portion: Optional[str] = "first"
+        cls,
+        dataset_dir: str,
+        transform: callable,
+        portion: Optional[str] = "first",
+        invalid_image_handler: Optional[InvalidImageHandler] = None,
+        stage: int = 1,
     ):
         """
         Creates an ImageDataset from subdirectories of images,
@@ -112,6 +136,19 @@ class ImageDataset(Dataset):
 
                 image_paths.extend(selected_files)
 
+        if invalid_image_handler is not None:
+            image_paths = [
+                path
+                for path in image_paths
+                if invalid_image_handler.try_validate(
+                    path,
+                    stage=stage,
+                    operation="duplicate_detection_decode",
+                    source_type="source",
+                    source_root=dataset_dir,
+                )
+            ]
+
         return cls(image_paths, transform)
 
 
@@ -130,6 +167,8 @@ class DuplicateRemover(object):
         dataloader_num_workers: int = 4,
         pin_memory: bool = True,
         logger: Optional[logging.Logger] = None,
+        invalid_image_handler: Optional[InvalidImageHandler] = None,
+        stage: int = 1,
     ):
         """Initializes the DuplicateRemover object.
 
@@ -161,6 +200,8 @@ class DuplicateRemover(object):
         self.dataloader_batch_size = dataloader_batch_size
         self.dataloader_num_workers = dataloader_num_workers
         self.pin_memory = pin_memory
+        self.invalid_image_handler = invalid_image_handler
+        self.stage = stage
         self.data_cfg = timm.data.resolve_data_config(self.model.pretrained_cfg)
         self.transform = timm.data.create_transform(**self.data_cfg)
 
@@ -271,11 +312,20 @@ class DuplicateRemover(object):
             rtype = "op" if portion == "first" else "ed"
             self.logger.info(f"Removing {rtype} duplicates for '{dirpath}' ...")
             dataset = ImageDataset.from_subdirectories(
-                dirpath, self.transform, portion=portion
+                dirpath,
+                self.transform,
+                portion=portion,
+                invalid_image_handler=self.invalid_image_handler,
+                stage=self.stage,
             )
         else:
             self.logger.info(f"Removing duplicates for '{dirpath}' ...")
-            dataset = ImageDataset.from_directory(dirpath, self.transform)
+            dataset = ImageDataset.from_directory(
+                dirpath,
+                self.transform,
+                invalid_image_handler=self.invalid_image_handler,
+                stage=self.stage,
+            )
         if len(dataset) == 0:
             return
         self.remove_similar(dataset)

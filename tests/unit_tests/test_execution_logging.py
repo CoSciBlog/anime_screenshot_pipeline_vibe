@@ -33,3 +33,12 @@ def test_interactive_terminal_enables_colors(monkeypatch):
     monkeypatch.delenv("NO_COLOR", raising=False)
 
     assert supports_terminal_color(TerminalStream()) is True
+
+
+def test_summary_and_ok_messages_have_distinct_colors():
+    formatter = ColorFormatter("%(levelname)s - %(message)s", use_color=True)
+    summary = logging.LogRecord("test", logging.INFO, "", 0, "[SUMMARY] done", (), None)
+    success = logging.LogRecord("test", logging.INFO, "", 0, "[OK] done", (), None)
+
+    assert formatter.format(summary) == "\033[1;36mINFO - [SUMMARY] done\033[0m"
+    assert formatter.format(success) == "\033[32mINFO - [OK] done\033[0m"

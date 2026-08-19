@@ -13,6 +13,7 @@ from waifuc.source import WebDataSource, DanbooruSource
 from imgutils.detect import detect_faces, detect_heads
 
 from anime2sd.basics import get_corr_meta_names, get_or_generate_metadata, parse_grabber_info
+from anime2sd.invalid_images import EXPECTED_IMAGE_ERRORS, InvalidImageHandler
 
 
 class WebDataSourceWithLimit(WebDataSource):
@@ -193,6 +194,9 @@ class LocalSource(BaseDataSource):
         load_aux: Optional[List[str]] = None,
         load_grabber_ext: Optional[str] = None,
         progress_bar: bool = True,
+        invalid_image_handler: Optional[InvalidImageHandler] = None,
+        stage: int = 2,
+        source_type: str = "source",
     ):
         self.directory = directory
         self.recursive = recursive
@@ -200,13 +204,25 @@ class LocalSource(BaseDataSource):
         self.load_aux = load_aux or []
         self.load_grabber_ext = load_grabber_ext
         self.progress_bar = progress_bar
+        self.invalid_image_handler = invalid_image_handler
+        self.stage = stage
+        self.source_type = source_type
         self.total_images = self._count_total_images() if progress_bar else None
 
     def _count_total_images(self):
         return sum(1 for _ in self._iter_files())
 
     def _iter_files(self):
-        image_extensions = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
+        image_extensions = {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".bmp",
+            ".webp",
+            ".tif",
+            ".tiff",
+        }
         if self.recursive:
             for directory, _, files in os.walk(self.directory):
                 group_name = re.sub(r"[\W_]+", "_", directory).strip("_")
@@ -221,10 +237,23 @@ class LocalSource(BaseDataSource):
 
     def _iter(self) -> Iterator[ImageItem]:
         for file, group_name in self._iter_files():
+            if self.invalid_image_handler is not None:
+                self.invalid_image_handler.record_attempt(self.stage)
             try:
                 origin_item = ImageItem.load_from_image(file)
                 origin_item.image.load()
-            except UnidentifiedImageError:
+            except EXPECTED_IMAGE_ERRORS as exc:
+                if self.invalid_image_handler is not None:
+                    self.invalid_image_handler.handle_invalid_image(
+                        file,
+                        exc,
+                        stage=self.stage,
+                        operation="load_image",
+                        source_type=self.source_type,
+                        source_root=self.directory,
+                    )
+                elif not isinstance(exc, UnidentifiedImageError):
+                    raise
                 continue
 
             meta = get_or_generate_metadata(
@@ -264,6 +293,8 @@ class LocalSource(BaseDataSource):
                         grabber_info = f.readlines()
                     meta.update(parse_grabber_info(grabber_info))
 
+            if self.invalid_image_handler is not None:
+                self.invalid_image_handler.record_success(self.stage)
             yield ImageItem(origin_item.image, meta)
 
     def _iter_from(self) -> Iterator[ImageItem]:

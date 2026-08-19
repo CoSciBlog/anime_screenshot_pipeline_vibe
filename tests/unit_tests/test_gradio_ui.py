@@ -17,6 +17,7 @@ def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatc
     ]
 
     assert "Stop pipeline" in components
+    assert "Reconnect live run" in components
     assert "Shut down server" in components
     assert "Yes, shut down server" in components
     assert "Shut down the server?" in components
@@ -43,10 +44,15 @@ def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatc
     assert "--remove_dst_metadata_after_pipeline" in components
     assert "--remove_ref_metadata_after_pipeline" in components
     assert "--classification_chunk_size" in components
+    assert "--continue_on_invalid_image" in components
+    assert "--quarantine_invalid_images" in components
+    assert "--quarantine_dir" in components
+    assert "--invalid_image_log" in components
     assert "create_workspace" in dependencies
     assert "clear_workspace_output" in dependencies
     assert "run_saved_profile" in dependencies
     assert "stop_pipeline" in dependencies
+    assert "reconnect_pipeline" in dependencies
     assert "shutdown_server" in dependencies
     assert "load_global_configuration" in dependencies
     assert tabs[0] == "General"
@@ -196,6 +202,17 @@ def test_no_color_keeps_terminal_severity_lines_plain(monkeypatch, capsys):
     assert capsys.readouterr().out == "pipeline - ERROR - failed\n"
 
 
+def test_run_output_highlights_summary_and_success(monkeypatch):
+    monkeypatch.delenv("NO_COLOR", raising=False)
+
+    assert ui.colorize_terminal_line("pipeline - INFO - [SUMMARY] totals\n") == (
+        "\033[1;36mpipeline - INFO - [SUMMARY] totals\033[0m\n"
+    )
+    assert ui.colorize_terminal_line("pipeline - INFO - [OK] complete\n") == (
+        "\033[32mpipeline - INFO - [OK] complete\033[0m\n"
+    )
+
+
 def test_run_log_cleaning_replaces_repeated_progress_lines():
     history = []
 
@@ -213,6 +230,27 @@ def test_stage_progress_reports_completed_and_current_stage():
     assert "Current: Stage 3 - Classify" in markup
     assert "1 of 3 stages complete" in markup
     assert "Clustering active" in markup
+
+
+def test_reconnect_returns_latest_process_wide_run_state():
+    expected = ("<status>running</status>", "<progress>50</progress>", "line one")
+    with ui.PIPELINE_STATE_LOCK:
+        ui.PIPELINE_RUN_STATE.clear()
+    try:
+        ui.remember_pipeline_state(expected)
+        assert ui.reconnect_pipeline_state() == expected
+    finally:
+        with ui.PIPELINE_STATE_LOCK:
+            ui.PIPELINE_RUN_STATE.clear()
+
+
+def test_invalid_image_defaults_are_safe_and_configurable():
+    defaults = ui.defaults(include_screenshots=False)
+
+    assert defaults["continue_on_invalid_image"] is True
+    assert defaults["quarantine_invalid_images"] is True
+    assert defaults["quarantine_dir"] == "auto"
+    assert defaults["invalid_image_log"] is True
 
 
 def test_consecutive_selected_stages_are_run_as_one_pipeline_segment():

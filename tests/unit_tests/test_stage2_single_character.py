@@ -382,7 +382,6 @@ def test_stage4_does_not_duplicate_uncropped_stage2_original(tmp_path):
     output_dir = tmp_path / "training"
     raw_dir.mkdir()
     classified_dir.mkdir()
-    (output_dir / "classified").mkdir(parents=True)
     raw_path = raw_dir / "frame.png"
     classified_path = classified_dir / "frame.png"
     Image.new("RGB", (100, 100), "white").save(raw_path)
@@ -414,6 +413,43 @@ def test_stage4_does_not_duplicate_uncropped_stage2_original(tmp_path):
     )
 
     assert len(list(output_dir.rglob("*.png"))) == 1
+    output_path = output_dir / "classified" / "frame.png"
+    output_meta_path, _ = get_corr_meta_names(str(output_path))
+    assert output_path.is_file()
+    assert os.path.isfile(output_meta_path)
+
+
+def test_stage4_creates_output_directory_when_resizing(tmp_path):
+    classified_dir = tmp_path / "classified"
+    output_dir = tmp_path / "training"
+    classified_dir.mkdir()
+    image_path = classified_dir / "frame.png"
+    Image.new("RGB", (100, 100), "white").save(image_path)
+    write_metadata(
+        image_path,
+        {
+            "filename": "frame.png",
+            "path": str(image_path.resolve()),
+            "current_path": str(image_path.resolve()),
+            "image_size": [100, 100],
+            "characters": ["hero"],
+        },
+    )
+
+    resize_character_images(
+        [str(classified_dir)],
+        str(output_dir),
+        max_size=64,
+        ext=".png",
+        image_type="screenshots",
+        n_nocharacter_frames=0,
+        to_resize=True,
+    )
+
+    output_path = output_dir / "classified" / "frame.png"
+    output_meta_path, _ = get_corr_meta_names(str(output_path))
+    assert output_path.is_file()
+    assert os.path.isfile(output_meta_path)
 
 
 def test_stage2_summary_reports_all_decision_counters(caplog):

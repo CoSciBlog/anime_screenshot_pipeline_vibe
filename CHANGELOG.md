@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.5 - 2026-08-21
+
+### Fixed
+
+- Fixed Stage 4 dataset selection with `--no-resize` so it creates missing training-category directories before copying selected images and metadata.
+- Created the same destination directories before resized image writes, preventing a logged image-save failure from leaving metadata without its image.
+- Added regression coverage for fresh Stage 4 output trees in both copy and resize modes.
+
+### Changed
+
+- Updated the package version to `0.0.5`.
+
 ## 0.0.4 - 2026-08-20
 
 ### Added

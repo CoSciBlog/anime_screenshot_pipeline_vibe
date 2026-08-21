@@ -399,6 +399,7 @@ def save_image_and_meta(
     """
     if logger is None:
         logger = logging.getLogger()
+    os.makedirs(save_dir, exist_ok=True)
     # Extract the filename from the original image path
     filename = os.path.basename(img_path)
     base_filename = os.path.splitext(filename)[0]
@@ -450,6 +451,7 @@ def copy_image_and_meta(img_path: str, save_dir: str, image_type: str) -> None:
     Raises:
         ValueError: If metadata file does not exist.
     """
+    os.makedirs(save_dir, exist_ok=True)
     saved_img_path = os.path.join(save_dir, os.path.basename(img_path))
     shutil.copy(img_path, saved_img_path)
     # Copy the corresponding metadata file

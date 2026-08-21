@@ -50,6 +50,8 @@ The content expected in `src` depends on the first enabled stage: videos for Sta
 
 Running **Create workspace folders** is non-destructive: existing `src`, `ref`, `logs`, and `dst` content is retained. It does not create empty `dst`, `dst/intermediate`, or `dst/training` directories. Use **Clear generated output** only when you intentionally want to remove the contents below `dst`; it removes the output tree and does not touch source or reference images.
 
+Starting with version 0.0.5, Stage 4 creates each required training-category directory lazily when it writes the first selected image. This applies both when images are resized and when `--no-resize` copies the original files unchanged, so a new or cleaned `dst/training` tree does not need to be prepared manually.
+
 Generated per-image sidecars are kept out of image views. Each folder containing output images stores its corresponding JSON metadata and CCIP cache arrays under a local `metadata` child directory:
 
 ```text

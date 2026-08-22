@@ -137,6 +137,7 @@ FIELD_GROUPS = OrderedDict(
                 "remove_intermediate",
                 "remove_src_files_after_pipeline",
                 "remove_dst_metadata_after_pipeline",
+                "remove_training_after_pipeline",
                 "remove_ref_metadata_after_pipeline",
                 "overwrite_path",
                 "load_grabber_ext",
@@ -359,6 +360,10 @@ FIELD_GUIDANCE = {
         "Deletes generated metadata folders and JSON/NPY sidecars below the destination folder after a successful full pipeline run. "
         "Images and captions are kept."
     ),
+    "remove_training_after_pipeline": (
+        "Deletes the complete `dst/training` tree only after every selected stage finishes successfully. "
+        "The sorted images in `dst/intermediate` are explicitly preserved. Enable this when the training export is temporary or has already been consumed."
+    ),
     "remove_ref_metadata_after_pipeline": (
         "Deletes generated metadata folders and JSON/NPY sidecars below the reference folder after a successful full pipeline run. "
         "Reference images are kept."
@@ -389,6 +394,64 @@ FIELD_GUIDANCE = {
     "min_multiply": "Sets the minimum repeat exposure so small groups are not ignored during training.",
     "max_multiply": "Caps oversampling. Lower caps reduce overfitting risk for small or rare groups.",
     "weight_csv": "Optional manual weight table. Use it when automatic balancing needs project-specific overrides.",
+    "extra_path_component": "Adds an optional project or variant folder below both intermediate and training output trees. Leave empty for the standard layout.",
+    "log_dir": "Stores pipeline logs for troubleshooting. Use `none` only when you deliberately do not need a run history.",
+    "log_prefix": "Names generated log files so parallel datasets and repeated runs remain easy to distinguish.",
+    "overwrite_path": "Rewrites source paths stored in metadata. This is an advanced migration option and should normally remain disabled.",
+    "pipeline_type": "Selects the source workflow: anime screenshots or booru images. This changes download, classification, and metadata behavior.",
+    "image_type": "Names the image category in output paths and can be included in captions. Leave empty to reuse the pipeline type.",
+    "remove_intermediate": "Removes classified working data after Stage 4 consumes it. Keep disabled when you want to review or reuse sorted intermediate images.",
+    "load_grabber_ext": "Loads metadata exported by an image grabber. Values from these files take precedence over auxiliary metadata.",
+    "load_aux": "Lists auxiliary metadata fields to restore before processing, such as tags or character assignments.",
+    "save_aux": "Lists metadata fields to write as sidecars during supported stages for later reuse or inspection.",
+    "anime_name": "Search title used for anime torrent downloads and, when no separate booru title is set, for booru downloads.",
+    "min_download_episode": "First episode included in an anime download range. Leave empty to start with the earliest available episode.",
+    "max_download_episode": "Last episode included in an anime download range. Leave empty to keep downloading later episodes.",
+    "anime_name_booru": "Booru search title. Leave empty to reuse the anime title.",
+    "character_info_file": "CSV mapping used to normalize character names and optionally drive character-specific downloads.",
+    "download_for_characters": "Runs booru searches for every character in the mapping file, improving cast coverage at the cost of more requests and files.",
+    "image_prefix": "Prefix for extracted frame names. Leave empty to derive it from each video filename.",
+    "ep_init": "Starting episode number used when filenames do not provide reliable episode information.",
+    "ignore_character_metadata": "Ignores existing character tags during classification. This is mainly useful for reclassifying booru data from visual evidence alone.",
+    "no_extract_from_noise": "Prevents plausible character matches from being recovered from the noise cluster, favoring precision over recall.",
+    "accept_multiple_candidates": "Allows a label when metadata contains several plausible characters. Useful for recurring pairs, but it can increase ambiguous matches.",
+    "overwrite_emb_init_info": "Replaces existing embedding trigger-word information instead of preserving earlier values.",
+    "character_overwrite_uncropped": "Replaces character metadata on uncropped booru images with the Stage 4 result.",
+    "character_remove_unclassified": "Removes character names that Stage 4 could not confirm from uncropped booru images.",
+    "image_save_ext": "File extension used for exported training images. Choose a format supported by your trainer and storage workflow.",
+    "n_anime_reg": "Number of character-free anime screenshots retained as regularization material.",
+    "overwrite_tags": "Regenerates tags even when tag metadata already exists. Disable to preserve reviewed tags.",
+    "sort_mode": "Orders tags by confidence, randomly, or in their original order. Ordering changes which concepts appear earliest in captions.",
+    "append_dropped_character_tags": "Keeps removed character tags at the end of captions instead of discarding them completely.",
+    "blacklist_tags_file": "Text file of tags that must never appear in generated captions.",
+    "overlap_tags_file": "JSON rules used to remove redundant tags that describe the same concept.",
+    "character_tags_file": "Character-tag hierarchy used to identify core identity traits and related tags.",
+    "process_from_original_tags": "Rebuilds processed tags from the untouched original tag list instead of the last processed result.",
+    "drop_difficulty": "Controls how broadly identity-related core tags are removed from per-image captions. Higher levels remove more categories.",
+    "compute_core_tag_up_levels": "Moves upward from the caption folder before computing shared core tags, widening the groups included in one calculation.",
+    "use_existing_core_tag_file": "Reuses an existing core-tag file for repeatable output and faster reruns.",
+    "drop_all_core": "Removes every detected core tag from individual captions, overriding the difficulty threshold.",
+    "emb_min_difficulty": "Lowest character-tag difficulty included when selecting embedding initialization words.",
+    "emb_max_difficulty": "Highest character-tag difficulty included when selecting embedding initialization words.",
+    "emb_init_all_core": "Uses every core tag for embedding initialization and ignores the minimum and maximum difficulty limits.",
+    "append_dropped_character_tags_wildcard": "Writes dropped character tags to wildcard output so they remain available outside normal captions.",
+    "caption_ordering": "Defines the order of character, copyright, image type, rating, crop information, and general tags in each caption.",
+    "caption_inner_sep": "Separator between multiple values inside one caption field.",
+    "caption_outer_sep": "Separator between different caption fields.",
+    "character_sep": "Separator between multiple characters in one image.",
+    "character_inner_sep": "Separator between values belonging to one character.",
+    "character_outer_sep": "Separator between different character metadata fields.",
+    "keep_tokens_sep": "Marker used by Kohya trainers to separate fixed keep-tokens. Leave empty to reuse the character field separator.",
+    "keep_tokens_before": "Caption field placed immediately after the keep-token marker.",
+    "use_npeople_prob": "Probability of adding the number of people to captions. This field is reserved and is not yet implemented by the pipeline.",
+    "use_copyright_prob": "Probability of including the source series or copyright name in a caption.",
+    "use_image_type_prob": "Probability of including the configured image category in a caption.",
+    "use_artist_prob": "Probability of including artist metadata in a caption.",
+    "use_rating_prob": "Probability of including the content rating in a caption.",
+    "use_crop_info_prob": "Probability of describing crop type or framing in a caption.",
+    "rearrange_up_levels": "Moves upward from the training image folder before Stage 6 reorganizes the dataset.",
+    "max_character_number": "Groups images above this character count into one overflow category, reducing very sparse combinations.",
+    "compute_multiply_up_levels": "Moves upward from the rearranged folder before Stage 7 calculates repeat weights."
 }
 
 DEFAULT_LANGUAGE = "en"
@@ -445,15 +508,19 @@ GROUP_LABELS_DE = {
 
 UI_TEXT = {
     "en": {
+        "pipeline_page": "Pipeline",
+        "settings_page": "App settings",
+        "settings_intro": "Choose the interface language and manage the workspace and reusable configuration. Language changes are applied immediately; save the configuration to restore them on the next launch.",
         "workflow": "Workflow",
         "stages_to_run": "Stages to run",
         "stages_info": "Only enabled stages are run and shown in Settings by stage. Stage 3 uses reference character folders for matching.",
-        "stage_guide": "Stage guide",
+        "stage_guide": "Stage guide · Stage-Übersicht",
         "run_pipeline": "Run pipeline",
         "stop_pipeline": "Stop pipeline",
         "reconnect_pipeline": "Reconnect live run",
         "ready": "Ready",
         "ready_message": "Select stages and run the pipeline.",
+        "no_run_yet": "No pipeline run has been started in this server session.",
         "run_log": "Run log",
         "configuration": "Configuration",
         "language": "Language",
@@ -491,15 +558,19 @@ UI_TEXT = {
         "complete_count": "{done} of {total} stages complete",
     },
     "de": {
+        "pipeline_page": "Pipeline",
+        "settings_page": "App-Einstellungen",
+        "settings_intro": "Wähle die Sprache der Oberfläche und verwalte Workspace sowie wiederverwendbare Konfiguration. Sprachänderungen gelten sofort; speichere die Konfiguration, damit sie beim nächsten Start wiederhergestellt werden.",
         "workflow": "Workflow",
         "stages_to_run": "Auszuführende Stages",
         "stages_info": "Nur aktivierte Stages werden ausgeführt und unter Einstellungen nach Stage angezeigt. Stage 3 nutzt Referenzordner für die Charakterzuordnung.",
-        "stage_guide": "Stage-Übersicht",
+        "stage_guide": "Stage guide · Stage-Übersicht",
         "run_pipeline": "Pipeline starten",
         "stop_pipeline": "Pipeline stoppen",
         "reconnect_pipeline": "Live-Lauf wieder verbinden",
         "ready": "Bereit",
         "ready_message": "Wähle Stages aus und starte die Pipeline.",
+        "no_run_yet": "In dieser Server-Sitzung wurde noch kein Pipeline-Lauf gestartet.",
         "run_log": "Ausführungslog",
         "configuration": "Konfiguration",
         "language": "Sprache",
@@ -540,9 +611,9 @@ UI_TEXT = {
 
 FIELD_GUIDANCE_DE = {
     "continue_on_invalid_image": "Setzt die Pipeline nach einer eindeutig unlesbaren Datei fort. Kritische Modell-, CUDA-, ONNX- und Programmierfehler brechen weiterhin ab.",
-    "quarantine_invalid_images": "Verschiebt bestaetigte defekte Dateien mit relativer Ordnerstruktur aus dem aktiven Datensatz, ohne vorhandene Quarantaenedateien zu ueberschreiben.",
+    "quarantine_invalid_images": "Verschiebt bestätigte defekte Dateien mit relativer Ordnerstruktur aus dem aktiven Datensatz, ohne vorhandene Quarantänedateien zu überschreiben.",
     "quarantine_dir": r"'auto' verwendet <workspace>\quarantine; alternativ kann ein eigener Ordner gesetzt werden. Stage- und Quell-Unterordner entstehen automatisch.",
-    "invalid_image_log": "Schreibt pro defektem Bild ein lesbares Log und einen JSONL-Eintrag mit Originalpfad, Quarantaenepfad, Operation und Move-Ergebnis.",
+    "invalid_image_log": "Schreibt pro defektem Bild ein lesbares Log und einen JSONL-Eintrag mit Originalpfad, Quarantänepfad, Operation und Verschiebe-Ergebnis.",
     "src_dir": r"Quellordner für die erste aktivierte Stage. Je nach Startpunkt enthält er Videos, Rohbilder oder Zwischendaten. Mit Workspace-Stammordner wird er auf <root>\src gesetzt; Referenzbilder gehören nach ref.",
     "dst_dir": r"Ausgabe-Stammordner der Pipeline. Mit Workspace-Stammordner landen Zwischendaten unter <root>\dst\intermediate und Trainingsdaten unter <root>\dst\training.",
     "character_ref_dir": r"Referenzordner nur für Stage 3. Lege pro Charakter einen Unterordner an, z. B. <root>\ref\frieren\*.png. Gute Referenzen reduzieren falsche Cluster.",
@@ -579,6 +650,7 @@ FIELD_GUIDANCE_DE = {
     "remove_noise_folder_after_classification": "Löscht `0_noise`/`0_noisy` nach Stage 3. Nur nutzen, wenn verworfene Crops nicht für Review, Debugging oder spätere Nutzung gebraucht werden.",
     "remove_src_files_after_pipeline": "Löscht Dateien im konfigurierten Quellordner erst nach erfolgreichem Abschluss der gesamten Pipeline. Nur nutzen, wenn die Quellen gesichert sind oder nicht erneut gebraucht werden.",
     "remove_dst_metadata_after_pipeline": "Löscht generierte metadata-Ordner sowie JSON/NPY-Sidecars im Zielordner nach erfolgreichem Abschluss der gesamten Pipeline. Bilder und Captions bleiben erhalten.",
+    "remove_training_after_pipeline": "Löscht erst nach einem vollständig erfolgreichen Lauf den gesamten Ordner `dst/training`. `dst/intermediate` und die dort fertig sortierten Bilder bleiben ausdrücklich erhalten.",
     "remove_ref_metadata_after_pipeline": "Löscht generierte metadata-Ordner sowie JSON/NPY-Sidecars im Referenzordner nach erfolgreichem Abschluss der gesamten Pipeline. Referenzbilder bleiben erhalten.",
     "no_filter_characters": "Deaktiviert Konsistenzfilter. Dadurch bleiben mehr Samples erhalten, aber mit höherem Label-Noise-Risiko.",
     "keep_unnamed_clusters": "Behält unbenannte Cluster als Zusatzmaterial. Sie erhöhen Abdeckung, erhalten aber keine Referenznamen.",
@@ -604,6 +676,64 @@ FIELD_GUIDANCE_DE = {
     "min_multiply": "Mindest-Repeat, damit kleine Gruppen im Training nicht ignoriert werden.",
     "max_multiply": "Begrenzt Oversampling. Niedrigere Caps senken Overfitting-Risiko bei kleinen Gruppen.",
     "weight_csv": "Optionale manuelle Gewichtungstabelle für projektspezifische Korrekturen.",
+    "extra_path_component": "Fügt unter `intermediate` und `training` einen optionalen Projekt- oder Variantenordner ein. Leer lassen für die Standardstruktur.",
+    "log_dir": "Speichert Pipeline-Logs zur Fehlersuche. `none` nur verwenden, wenn bewusst kein Laufprotokoll benötigt wird.",
+    "log_prefix": "Benennt Logdateien, damit Datensätze und wiederholte Läufe klar unterscheidbar bleiben.",
+    "overwrite_path": "Schreibt die in Metadaten gespeicherten Quellpfade neu. Fortgeschrittene Migrationsoption, normalerweise deaktiviert lassen.",
+    "pipeline_type": "Wählt den Quell-Workflow für Anime-Screenshots oder Booru-Bilder und verändert Download-, Klassifizierungs- und Metadatenverhalten.",
+    "image_type": "Benennt die Bildkategorie in Ausgabepfaden und optional in Captions. Leer übernimmt den Pipeline-Typ.",
+    "remove_intermediate": "Löscht klassifizierte Arbeitsdaten, nachdem Stage 4 sie verwendet hat. Deaktiviert lassen, wenn sortierte Zwischendaten geprüft oder wiederverwendet werden sollen.",
+    "load_grabber_ext": "Lädt Metadaten eines Image-Grabbers. Deren Werte überschreiben gleichnamige Hilfsmetadaten.",
+    "load_aux": "Liste zusätzlicher Metadatenfelder, die vor der Verarbeitung geladen werden, etwa Tags oder Charakterzuordnungen.",
+    "save_aux": "Liste der Metadatenfelder, die in unterstützten Stages als Sidecars gespeichert werden.",
+    "anime_name": "Suchtitel für Anime-Torrents und, falls kein eigener Booru-Titel gesetzt ist, auch für Booru-Downloads.",
+    "min_download_episode": "Erste Episode des Downloadbereichs. Leer beginnt mit der frühesten verfügbaren Episode.",
+    "max_download_episode": "Letzte Episode des Downloadbereichs. Leer schließt auch spätere Episoden ein.",
+    "anime_name_booru": "Suchtitel für Booru-Downloads. Leer übernimmt den Anime-Titel.",
+    "character_info_file": "CSV-Zuordnung zur Vereinheitlichung von Charakternamen und optional für charakterbezogene Downloads.",
+    "download_for_characters": "Startet für jeden Charakter der CSV eine eigene Booru-Suche. Verbessert Cast-Abdeckung, erzeugt aber mehr Anfragen und Dateien.",
+    "image_prefix": "Präfix für extrahierte Frame-Dateien. Leer leitet es aus dem Videonamen ab.",
+    "ep_init": "Startnummer für Episoden, wenn Dateinamen keine verlässliche Episodennummer enthalten.",
+    "ignore_character_metadata": "Ignoriert vorhandene Charakter-Tags bei der Klassifizierung. Vor allem zum visuellen Neuklassifizieren von Booru-Daten geeignet.",
+    "no_extract_from_noise": "Verhindert, dass plausible Charaktertreffer aus dem Noise-Cluster gerettet werden. Präzision steigt, Recall sinkt.",
+    "accept_multiple_candidates": "Erlaubt Labels trotz mehrerer Metadaten-Kandidaten. Hilfreich bei festen Paaren, aber anfälliger für Mehrdeutigkeit.",
+    "overwrite_emb_init_info": "Ersetzt bestehende Triggerwort-Informationen für Embeddings, statt sie beizubehalten.",
+    "character_overwrite_uncropped": "Ersetzt Charaktermetadaten unbeschnittener Booru-Bilder durch das Ergebnis von Stage 4.",
+    "character_remove_unclassified": "Entfernt Charakternamen, die Stage 4 in unbeschnittenen Booru-Bildern nicht bestätigen konnte.",
+    "image_save_ext": "Dateiendung für exportierte Trainingsbilder. Ein vom Trainer unterstütztes Format wählen.",
+    "n_anime_reg": "Anzahl charakterfreier Anime-Screenshots, die als Regularisierungsmaterial behalten werden.",
+    "overwrite_tags": "Erzeugt Tags neu, auch wenn bereits Tag-Metadaten vorhanden sind. Deaktivieren, um geprüfte Tags zu erhalten.",
+    "sort_mode": "Sortiert Tags nach Konfidenz, zufällig oder in Originalreihenfolge. Die Reihenfolge beeinflusst frühe Caption-Konzepte.",
+    "append_dropped_character_tags": "Hängt entfernte Charakter-Tags ans Caption-Ende, statt sie vollständig zu verwerfen.",
+    "blacklist_tags_file": "Textdatei mit Tags, die niemals in generierten Captions erscheinen dürfen.",
+    "overlap_tags_file": "JSON-Regeln zum Entfernen redundanter Tags mit überlappender Bedeutung.",
+    "character_tags_file": "Tag-Hierarchie zur Erkennung von Identitätsmerkmalen und verwandten Charakter-Tags.",
+    "process_from_original_tags": "Baut verarbeitete Tags aus der unveränderten Originalliste statt aus dem letzten Verarbeitungsergebnis neu auf.",
+    "drop_difficulty": "Steuert, wie viele identitätsbezogene Core-Tags aus Einzelbild-Captions entfernt werden. Höhere Werte entfernen mehr Kategorien.",
+    "compute_core_tag_up_levels": "Geht vor der Core-Tag-Berechnung Ordner nach oben und erweitert dadurch die gemeinsam ausgewertete Gruppe.",
+    "use_existing_core_tag_file": "Verwendet eine vorhandene Core-Tag-Datei für schnellere und reproduzierbare Wiederholungsläufe.",
+    "drop_all_core": "Entfernt alle erkannten Core-Tags aus Einzelbild-Captions und überschreibt den Schwierigkeitswert.",
+    "emb_min_difficulty": "Niedrigste Tag-Schwierigkeit für die Auswahl von Embedding-Initialisierungswörtern.",
+    "emb_max_difficulty": "Höchste Tag-Schwierigkeit für die Auswahl von Embedding-Initialisierungswörtern.",
+    "emb_init_all_core": "Nutzt alle Core-Tags zur Embedding-Initialisierung und ignoriert die Min-/Max-Grenzen.",
+    "append_dropped_character_tags_wildcard": "Schreibt entfernte Charakter-Tags in die Wildcard-Ausgabe, damit sie außerhalb normaler Captions verfügbar bleiben.",
+    "caption_ordering": "Legt die Reihenfolge von Charakter, Copyright, Bildtyp, Rating, Crop-Info und Tags in Captions fest.",
+    "caption_inner_sep": "Trennzeichen zwischen mehreren Werten innerhalb eines Caption-Felds.",
+    "caption_outer_sep": "Trennzeichen zwischen unterschiedlichen Caption-Feldern.",
+    "character_sep": "Trennzeichen zwischen mehreren Charakteren in einem Bild.",
+    "character_inner_sep": "Trennzeichen zwischen Werten desselben Charakters.",
+    "character_outer_sep": "Trennzeichen zwischen unterschiedlichen Charakter-Metadatenfeldern.",
+    "keep_tokens_sep": "Marker für feste Keep-Tokens in Kohya-Trainern. Leer übernimmt den Charakter-Feldtrenner.",
+    "keep_tokens_before": "Caption-Feld, das direkt hinter dem Keep-Token-Marker beginnt.",
+    "use_npeople_prob": "Wahrscheinlichkeit für die Personenanzahl in Captions. Diese Funktion ist in der Pipeline noch nicht implementiert.",
+    "use_copyright_prob": "Wahrscheinlichkeit, Serien- oder Copyright-Metadaten in eine Caption aufzunehmen.",
+    "use_image_type_prob": "Wahrscheinlichkeit, die konfigurierte Bildkategorie in eine Caption aufzunehmen.",
+    "use_artist_prob": "Wahrscheinlichkeit, Künstler-Metadaten in eine Caption aufzunehmen.",
+    "use_rating_prob": "Wahrscheinlichkeit, das Inhaltsrating in eine Caption aufzunehmen.",
+    "use_crop_info_prob": "Wahrscheinlichkeit, Crop-Typ oder Bildausschnitt in einer Caption zu beschreiben.",
+    "rearrange_up_levels": "Geht vor Stage 6 vom Trainingsbildordner aus um diese Anzahl Ebenen nach oben.",
+    "max_character_number": "Fasst Bilder oberhalb dieser Charakteranzahl in einer Sammelkategorie zusammen und reduziert seltene Kombinationen.",
+    "compute_multiply_up_levels": "Geht vor der Repeat-Berechnung von Stage 7 vom sortierten Ordner aus nach oben."
 }
 
 
@@ -649,15 +779,10 @@ def group_label(group_name: str, language: str | None = DEFAULT_LANGUAGE) -> str
 
 def setting_info(action: argparse.Action, language: str | None = DEFAULT_LANGUAGE) -> str:
     language = normalized_language(language)
-    base = action.help or ui_text(language, "setting_fallback")
     guidance = FIELD_GUIDANCE_DE.get(action.dest) if language == "de" else FIELD_GUIDANCE.get(action.dest)
-    if language == "de":
-        if guidance:
-            return f"{ui_text(language, 'impact')}: {guidance}"
-        return ui_text(language, "setting_fallback")
     if guidance:
-        return f"{base} {ui_text(language, 'impact')}: {guidance}"
-    return base
+        return guidance
+    return action.help or ui_text(language, "setting_fallback")
 
 STYLE = """
 .gradio-container {
@@ -702,6 +827,23 @@ STYLE = """
 }
 .workspace {
   padding-top: .5rem;
+}
+.app-navigation > .tab-nav {
+  border-bottom: 1px solid var(--line);
+  gap: .35rem;
+  margin-bottom: 1rem;
+}
+.app-navigation > .tab-nav button {
+  border-radius: .5rem .5rem 0 0;
+  color: var(--muted);
+  font-weight: 750;
+  letter-spacing: .02em;
+  padding: .7rem 1.15rem;
+}
+.app-navigation > .tab-nav button.selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .run-panel {
   border: 1px solid var(--line);
@@ -809,8 +951,11 @@ STYLE = """
   height: 100%;
   transition: width .22s ease;
 }
-.config-accordion {
-  margin-top: 1rem;
+.settings-page > .prose:first-child {
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+  margin: 0 0 1rem;
+  padding: .25rem 0 .25rem .85rem;
 }
 .compact-upload {
   min-height: 6.2rem !important;
@@ -1136,6 +1281,7 @@ def remember_pipeline_state(result: tuple[str, str, str]) -> tuple[str, str, str
 
 def reconnect_pipeline_state(
     language: str | None = DEFAULT_LANGUAGE,
+    selected: Iterable[Any] | None = None,
 ) -> tuple[str, str, str]:
     """Return the latest process-wide run state after a browser reload."""
     with PIPELINE_STATE_LOCK:
@@ -1147,8 +1293,8 @@ def reconnect_pipeline_state(
             )
     return (
         status_markup(ui_text(language, "ready"), ui_text(language, "ready_message")),
-        progress_markup([], set(), None, language=language),
-        "No pipeline run has been started in this server session.",
+        progress_markup(stage_values(selected), set(), None, language=language),
+        ui_text(language, "no_run_yet"),
     )
 
 
@@ -1611,6 +1757,9 @@ def interface_language_updates(language: str, selected: Iterable[Any] | None):
     language = normalized_language(language)
     selected_values = [str(stage) for stage in stage_values(selected)]
     updates = [
+        gr.update(label=ui_text(language, "pipeline_page")),
+        gr.update(label=ui_text(language, "settings_page")),
+        gr.update(value=ui_text(language, "settings_intro")),
         gr.update(value=f"<p class='panel-label'>{ui_text(language, 'workflow')}</p>"),
         gr.update(
             label=ui_text(language, "stages_to_run"),
@@ -1619,6 +1768,7 @@ def interface_language_updates(language: str, selected: Iterable[Any] | None):
             value=selected_values,
         ),
         gr.update(value=stage_guide_html(language)),
+        gr.update(label=ui_text(language, "stage_guide")),
         gr.update(value=ui_text(language, "run_pipeline")),
         gr.update(value=ui_text(language, "stop_pipeline")),
         gr.update(value=status_markup(ui_text(language, "ready"), ui_text(language, "ready_message"))),
@@ -1682,105 +1832,109 @@ def build_interface() -> gr.Blocks:
         title="Anime2SD Frame Lab",
         elem_classes="workspace",
     ) as demo:
-        with gr.Column(elem_classes="run-panel"):
-            workflow_label = gr.HTML(f"<p class='panel-label'>{ui_text(initial_language, 'workflow')}</p>")
-            stage_selector = gr.CheckboxGroup(
-                choices=stage_choices(initial_language),
-                value=initial_stages,
-                label=ui_text(initial_language, "stages_to_run"),
-                info=ui_text(initial_language, "stages_info"),
-            )
-            with gr.Accordion(ui_text(initial_language, "stage_guide"), open=False):
-                stage_guide = gr.HTML(stage_guide_html(initial_language))
-            with gr.Row():
-                run_button = gr.Button(ui_text(initial_language, "run_pipeline"), variant="primary")
-                stop_button = gr.Button(ui_text(initial_language, "stop_pipeline"), variant="stop")
-                reconnect_button = gr.Button(ui_text(initial_language, "reconnect_pipeline"))
-            run_status = gr.HTML(
-                status_markup(ui_text(initial_language, "ready"), ui_text(initial_language, "ready_message"))
-            )
-            stage_progress = gr.HTML(
-                progress_markup(stage_values(initial_stages), set(), None, language=initial_language)
-            )
-            output = gr.Textbox(
-                label=ui_text(initial_language, "run_log"), lines=18, interactive=False, elem_classes="run-log"
-            )
-
-        with gr.Accordion(ui_text(initial_language, "configuration"), open=False, elem_classes="run-panel config-accordion"):
-            with gr.Row():
-                with gr.Column():
-                    with gr.Column(elem_classes="workspace-card"):
-                        language_selector = gr.Dropdown(
-                            label=ui_text(initial_language, "language"),
-                            choices=LANGUAGE_CHOICES,
-                            value=initial_language,
-                            info=ui_text(initial_language, "language_info"),
-                        )
-                        workspace_root = gr.Textbox(
-                            label=ui_text(initial_language, "workspace_root"),
-                            value=initial_workspace_root,
-                            placeholder=ui_text(initial_language, "workspace_placeholder"),
-                            info=ui_text(initial_language, "workspace_info"),
-                        )
-                        create_workspace_button = gr.Button(ui_text(initial_language, "create_workspace"))
-                        clear_output_button = gr.Button(ui_text(initial_language, "clear_output"), variant="stop")
-                        workspace_help = gr.Markdown(ui_text(initial_language, "workspace_help"))
-                with gr.Column():
-                    uploaded = gr.File(
-                        label=ui_text(initial_language, "import_configuration"),
-                        file_types=[".toml"],
-                        type="filepath",
-                        elem_classes="compact-upload",
+        with gr.Tabs(elem_classes="app-navigation"):
+            with gr.Tab(ui_text(initial_language, "pipeline_page")) as pipeline_page_tab:
+                with gr.Column(elem_classes="run-panel"):
+                    workflow_label = gr.HTML(f"<p class='panel-label'>{ui_text(initial_language, 'workflow')}</p>")
+                    stage_selector = gr.CheckboxGroup(
+                        choices=stage_choices(initial_language),
+                        value=initial_stages,
+                        label=ui_text(initial_language, "stages_to_run"),
+                        info=ui_text(initial_language, "stages_info"),
                     )
-                    load_button = gr.Button(ui_text(initial_language, "load_configuration"))
-                    configuration_help = gr.Markdown(ui_text(initial_language, "configuration_help"))
+                    with gr.Accordion(ui_text(initial_language, "stage_guide"), open=False) as stage_guide_accordion:
+                        stage_guide = gr.HTML(stage_guide_html(initial_language))
                     with gr.Row():
-                        save_button = gr.Button(ui_text(initial_language, "save_configuration"), variant="primary")
-                        export_button = gr.DownloadButton(
-                            ui_text(initial_language, "export_settings"),
-                            value=str(GLOBAL_CONFIG) if GLOBAL_CONFIG.exists() else None,
-                        )
-            status = gr.Markdown(
-                f"{ui_text(initial_language, 'web_interface')}: `http://127.0.0.1:{PORT}` ({ui_text(initial_language, 'fixed_port')}).\n\n{initial_status}"
-            )
+                        run_button = gr.Button(ui_text(initial_language, "run_pipeline"), variant="primary")
+                        stop_button = gr.Button(ui_text(initial_language, "stop_pipeline"), variant="stop")
+                        reconnect_button = gr.Button(ui_text(initial_language, "reconnect_pipeline"))
+                    run_status = gr.HTML(
+                        status_markup(ui_text(initial_language, "ready"), ui_text(initial_language, "ready_message"))
+                    )
+                    stage_progress = gr.HTML(
+                        progress_markup(stage_values(initial_stages), set(), None, language=initial_language)
+                    )
+                    output = gr.Textbox(
+                        label=ui_text(initial_language, "run_log"), lines=18, interactive=False, elem_classes="run-log"
+                    )
 
-        settings_label = gr.HTML(f"<p class='settings-label'>{ui_text(initial_language, 'settings_by_stage')}</p>")
-        with gr.Tabs(elem_classes="settings-tabs"):
-            for group_name, fields in FIELD_GROUPS.items():
-                stage_number = GROUP_STAGES.get(group_name)
-                visible = stage_number is None or str(stage_number) in initial_stages
-                with gr.Tab(group_label(group_name, initial_language), visible=visible) as tab:
-                    all_setting_tabs.append(tab)
-                    if stage_number is not None:
-                        stage_tabs.append(tab)
-                        stage_descriptions.append(gr.Markdown(stage_details(stage_number, initial_language)[1]))
-                    group_actions = [item for item in ACTIONS if item.dest in fields]
-                    with gr.Column(elem_classes="settings-grid"):
-                        for offset in range(0, len(group_actions), 3):
+                settings_label = gr.HTML(f"<p class='settings-label'>{ui_text(initial_language, 'settings_by_stage')}</p>")
+                with gr.Tabs(elem_classes="settings-tabs"):
+                    for group_name, fields in FIELD_GROUPS.items():
+                        stage_number = GROUP_STAGES.get(group_name)
+                        visible = stage_number is None or str(stage_number) in initial_stages
+                        with gr.Tab(group_label(group_name, initial_language), visible=visible) as tab:
+                            all_setting_tabs.append(tab)
+                            if stage_number is not None:
+                                stage_tabs.append(tab)
+                                stage_descriptions.append(gr.Markdown(stage_details(stage_number, initial_language)[1]))
+                            group_actions = [item for item in ACTIONS if item.dest in fields]
+                            with gr.Column(elem_classes="settings-grid"):
+                                for offset in range(0, len(group_actions), 3):
+                                    with gr.Row():
+                                        for action in group_actions[offset:offset + 3]:
+                                            controls.append(make_component(action, initial.get(action.dest), initial_language))
+
+                    remaining = [action for action in ACTIONS if action.dest not in known_fields]
+                    if remaining:
+                        with gr.Tab(ui_text(initial_language, "additional_settings")):
+                            with gr.Column(elem_classes="settings-grid"):
+                                for offset in range(0, len(remaining), 3):
+                                    with gr.Row():
+                                        for action in remaining[offset:offset + 3]:
+                                            controls.append(make_component(action, initial.get(action.dest), initial_language))
+
+                save_settings_button = gr.Button(
+                    ui_text(initial_language, "save_configuration"),
+                    variant="primary",
+                    elem_classes="settings-save-button",
+                )
+
+            with gr.Tab(ui_text(initial_language, "settings_page")) as settings_page_tab:
+                with gr.Column(elem_classes="run-panel settings-page"):
+                    settings_intro = gr.Markdown(ui_text(initial_language, "settings_intro"))
+                    with gr.Row():
+                        with gr.Column():
+                            with gr.Column(elem_classes="workspace-card"):
+                                language_selector = gr.Dropdown(
+                                    label=ui_text(initial_language, "language"),
+                                    choices=LANGUAGE_CHOICES,
+                                    value=initial_language,
+                                    info=ui_text(initial_language, "language_info"),
+                                )
+                                workspace_root = gr.Textbox(
+                                    label=ui_text(initial_language, "workspace_root"),
+                                    value=initial_workspace_root,
+                                    placeholder=ui_text(initial_language, "workspace_placeholder"),
+                                    info=ui_text(initial_language, "workspace_info"),
+                                )
+                                create_workspace_button = gr.Button(ui_text(initial_language, "create_workspace"))
+                                clear_output_button = gr.Button(ui_text(initial_language, "clear_output"), variant="stop")
+                                workspace_help = gr.Markdown(ui_text(initial_language, "workspace_help"))
+                        with gr.Column():
+                            uploaded = gr.File(
+                                label=ui_text(initial_language, "import_configuration"),
+                                file_types=[".toml"],
+                                type="filepath",
+                                elem_classes="compact-upload",
+                            )
+                            load_button = gr.Button(ui_text(initial_language, "load_configuration"))
+                            configuration_help = gr.Markdown(ui_text(initial_language, "configuration_help"))
                             with gr.Row():
-                                for action in group_actions[offset:offset + 3]:
-                                    controls.append(make_component(action, initial.get(action.dest), initial_language))
-
-            remaining = [action for action in ACTIONS if action.dest not in known_fields]
-            if remaining:
-                with gr.Tab(ui_text(initial_language, "additional_settings")):
-                    with gr.Column(elem_classes="settings-grid"):
-                        for offset in range(0, len(remaining), 3):
-                            with gr.Row():
-                                for action in remaining[offset:offset + 3]:
-                                    controls.append(make_component(action, initial.get(action.dest), initial_language))
-
-        save_settings_button = gr.Button(
-            ui_text(initial_language, "save_configuration"),
-            variant="primary",
-            elem_classes="settings-save-button",
-        )
-        shutdown_button = gr.Button(ui_text(initial_language, "shutdown"), variant="stop", elem_classes="shutdown-button")
-        with gr.Column(visible=False, elem_classes="shutdown-confirmation") as shutdown_confirmation:
-            shutdown_text = gr.Markdown(ui_text(initial_language, "shutdown_confirm"))
-            with gr.Row():
-                cancel_shutdown_button = gr.Button(ui_text(initial_language, "cancel"))
-                confirm_shutdown_button = gr.Button(ui_text(initial_language, "confirm_shutdown"), variant="stop")
+                                save_button = gr.Button(ui_text(initial_language, "save_configuration"), variant="primary")
+                                export_button = gr.DownloadButton(
+                                    ui_text(initial_language, "export_settings"),
+                                    value=str(GLOBAL_CONFIG) if GLOBAL_CONFIG.exists() else None,
+                                )
+                    status = gr.Markdown(
+                        f"{ui_text(initial_language, 'web_interface')}: `http://127.0.0.1:{PORT}` ({ui_text(initial_language, 'fixed_port')}).\n\n{initial_status}"
+                    )
+                    shutdown_button = gr.Button(ui_text(initial_language, "shutdown"), variant="stop", elem_classes="shutdown-button")
+                    with gr.Column(visible=False, elem_classes="shutdown-confirmation") as shutdown_confirmation:
+                        shutdown_text = gr.Markdown(ui_text(initial_language, "shutdown_confirm"))
+                        with gr.Row():
+                            cancel_shutdown_button = gr.Button(ui_text(initial_language, "cancel"))
+                            confirm_shutdown_button = gr.Button(ui_text(initial_language, "confirm_shutdown"), variant="stop")
 
         ordered_controls = {action.dest: control for action, control in zip(
             [item for group in FIELD_GROUPS.values() for item in ACTIONS if item.dest in group] + remaining,
@@ -1819,9 +1973,13 @@ def build_interface() -> gr.Blocks:
             outputs=[status, export_button],
         )
         language_outputs = [
+            pipeline_page_tab,
+            settings_page_tab,
+            settings_intro,
             workflow_label,
             stage_selector,
             stage_guide,
+            stage_guide_accordion,
             run_button,
             stop_button,
             run_status,
@@ -1884,7 +2042,7 @@ def build_interface() -> gr.Blocks:
         )
         reconnect_button.click(
             reconnect_pipeline_state,
-            inputs=language_selector,
+            inputs=[language_selector, stage_selector],
             outputs=[run_status, stage_progress, output],
             api_name="reconnect_pipeline",
             concurrency_limit=None,
@@ -1893,7 +2051,7 @@ def build_interface() -> gr.Blocks:
         live_timer = gr.Timer(value=1.0, active=True)
         live_timer.tick(
             reconnect_pipeline_state,
-            inputs=language_selector,
+            inputs=[language_selector, stage_selector],
             outputs=[run_status, stage_progress, output],
             concurrency_limit=None,
             concurrency_id="pipeline_control",

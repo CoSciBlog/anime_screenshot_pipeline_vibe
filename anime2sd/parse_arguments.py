@@ -165,6 +165,15 @@ def create_parser():
         ),
     )
     parser.add_argument(
+        "--remove_training_after_pipeline",
+        action="store_true",
+        help=(
+            "Remove the complete --dst_dir/training folder after the full selected "
+            "pipeline finishes successfully. The --dst_dir/intermediate folder and "
+            "all sorted intermediate images are kept."
+        ),
+    )
+    parser.add_argument(
         "--remove_ref_metadata_after_pipeline",
         action="store_true",
         help=(

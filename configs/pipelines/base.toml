@@ -22,10 +22,16 @@ log_prefix = {}
 # Using by starting at stage 4 will prevent character information from being written to the original images
 # Should never be used in general
 overwrite_path = false
-# Pipeline type that is used to construct dataset
+# Remove classified working data after Stage 4 consumes it
 remove_intermediate = false
-# Remove files inside src_dir after the full selected pipeline finishes successfully
+# Remove files inside src_dir only after the full selected pipeline succeeds
 remove_src_files_after_pipeline = false
+# Remove generated JSON/NPY metadata below dst_dir while keeping images and captions
+remove_dst_metadata_after_pipeline = false
+# Remove the complete dst_dir/training tree after success while preserving dst_dir/intermediate
+remove_training_after_pipeline = false
+# Remove generated JSON/NPY metadata below character_ref_dir while keeping reference images
+remove_ref_metadata_after_pipeline = false
 
 # Invalid Image Error Handling
 [error_handling]

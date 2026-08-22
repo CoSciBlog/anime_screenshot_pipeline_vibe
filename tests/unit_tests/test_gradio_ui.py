@@ -33,7 +33,7 @@ def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatc
     assert "2 - Detect" in components
     assert "2 - Crop" not in components
     assert "Stage guide" in components
-    assert "Configuration" in components
+    assert "App settings" in components
     assert "Programmatic access" not in components
     assert "--max_images_per_character" in components
     assert "--max_images_per_character_per_episode" in components
@@ -42,6 +42,7 @@ def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatc
     assert "--remove_noise_folder_after_classification" in components
     assert "--remove_src_files_after_pipeline" in components
     assert "--remove_dst_metadata_after_pipeline" in components
+    assert "--remove_training_after_pipeline" in components
     assert "--remove_ref_metadata_after_pipeline" in components
     assert "--classification_chunk_size" in components
     assert "--continue_on_invalid_image" in components
@@ -57,8 +58,9 @@ def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatc
     assert "reconnect_pipeline" in dependencies
     assert "shutdown_server" in dependencies
     assert "load_global_configuration" in dependencies
-    assert tabs[0] == "General"
-    assert tabs[-1] == "Stage 7 - Balance"
+    assert tabs[0] == "Pipeline"
+    assert tabs[1] == "General"
+    assert tabs[-1] == "App settings"
     tab_props = {
         component.get("props", {}).get("label"): component.get("props", {})
         for component in config["components"]
@@ -89,6 +91,7 @@ def test_interface_exposes_control_endpoints_and_stage_tabs(tmp_path, monkeypatc
     last_stage_tab_index = max(
         index for index, component in enumerate(config["components"])
         if component.get("type") == "tabitem"
+        and str(component.get("props", {}).get("label", "")).startswith("Stage ")
     )
     assert len(save_indices) == 2
     assert max(save_indices) > last_stage_tab_index
@@ -411,6 +414,34 @@ def test_global_configuration_records_metadata_cleanup_toggles(tmp_path, monkeyp
     assert saved["remove_ref_metadata_after_pipeline"] is True
 
 
+def test_global_configuration_records_training_cleanup_toggle(tmp_path, monkeypatch):
+    values = [
+        ui.component_value(action, ui.defaults().get(action.dest))
+        for action in ui.ACTIONS
+    ]
+    cleanup_index = next(
+        index for index, action in enumerate(ui.ACTIONS)
+        if action.dest == "remove_training_after_pipeline"
+    )
+    values[cleanup_index] = True
+    monkeypatch.setattr(ui, "ROOT", tmp_path)
+    monkeypatch.setattr(ui, "GLOBAL_CONFIG", tmp_path / "configs" / "ui" / "configuration.toml")
+
+    ui.save_configuration("de", "", ["3", "4"], *values)
+    saved = ui.toml.load(ui.GLOBAL_CONFIG)
+
+    assert saved["remove_training_after_pipeline"] is True
+
+
+def test_every_setting_has_english_and_german_help_text():
+    assert {action.dest for action in ui.ACTIONS} <= set(ui.FIELD_GUIDANCE)
+    assert {action.dest for action in ui.ACTIONS} <= set(ui.FIELD_GUIDANCE_DE)
+    for action in ui.ACTIONS:
+        assert ui.setting_info(action, "en").strip()
+        assert ui.setting_info(action, "de").strip()
+        assert "%(default)s" not in ui.setting_info(action, "en")
+
+
 def test_global_configuration_is_loaded_with_stages_and_settings_at_startup(tmp_path, monkeypatch):
     path = tmp_path / "configs" / "ui" / "configuration.toml"
     path.parent.mkdir(parents=True)
@@ -465,9 +496,16 @@ def test_language_selection_is_saved_loaded_and_updates_interface(tmp_path, monk
     assert updates[0]["value"] == "de"
     assert updates[2]["choices"][2][0] == "2 - Erkennen"
     assert "Globale Konfiguration geladen" in updates[-1]
-    assert language_updates[1]["label"] == "Auszuführende Stages"
-    assert language_updates[1]["choices"][3][0] == "3 - Klassifizieren"
-    assert "Einstellungen nach Stage" in language_updates[19]["value"]
+    assert language_updates[1]["label"] == "App-Einstellungen"
+    stage_update = next(
+        update for update in language_updates
+        if update.get("label") == "Auszuführende Stages"
+    )
+    assert stage_update["choices"][3][0] == "3 - Klassifizieren"
+    assert any(
+        "Einstellungen nach Stage" in update.get("value", "")
+        for update in language_updates
+    )
 
 
 def test_initial_interface_uses_global_configuration_without_page_load_callback(tmp_path, monkeypatch):

@@ -16,6 +16,7 @@ from automatic_pipeline import (
     cleanup_noise_folder_after_classification,
     cleanup_source_files_after_pipeline,
     cleanup_stage2_crops_after_classification,
+    cleanup_training_after_pipeline,
     person_detection_config,
 )
 
@@ -163,6 +164,32 @@ def test_cleanup_metadata_after_pipeline_keeps_images_and_captions(tmp_path):
     assert not metadata.exists()
     assert not (character / ".legacy_meta.json").exists()
     assert not (character / ".legacy_ccip.npy").exists()
+
+
+def test_cleanup_training_after_pipeline_keeps_intermediate_tree(tmp_path):
+    dst = tmp_path / "dst"
+    training_image = dst / "training" / "frieren" / "image.webp"
+    intermediate_image = dst / "intermediate" / "screenshots" / "classified" / "image.webp"
+    for image in (training_image, intermediate_image):
+        image.parent.mkdir(parents=True, exist_ok=True)
+        image.write_text("image", encoding="utf-8")
+
+    removed = cleanup_training_after_pipeline(str(dst), logging.getLogger())
+
+    assert removed is True
+    assert not (dst / "training").exists()
+    assert intermediate_image.exists()
+
+
+def test_cleanup_training_after_pipeline_is_safe_when_training_is_missing(tmp_path):
+    intermediate_image = tmp_path / "dst" / "intermediate" / "sorted" / "image.webp"
+    intermediate_image.parent.mkdir(parents=True)
+    intermediate_image.write_text("image", encoding="utf-8")
+
+    removed = cleanup_training_after_pipeline(str(tmp_path / "dst"), logging.getLogger())
+
+    assert removed is False
+    assert intermediate_image.exists()
 
 
 def test_classified_output_stores_json_and_npy_in_metadata_subfolder(tmp_path):

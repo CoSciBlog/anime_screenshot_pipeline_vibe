@@ -476,17 +476,51 @@ def cleanup_metadata_after_pipeline(root_dir, logger, label):
     return removed
 
 
+def cleanup_training_after_pipeline(dst_dir, logger):
+    """Remove only the generated training tree below a destination root."""
+    if not dst_dir:
+        logger.info("No training data removed because no destination is configured.")
+        return False
+
+    destination_root = os.path.abspath(dst_dir)
+    training_dir = os.path.abspath(os.path.join(destination_root, "training"))
+    if os.path.commonpath((destination_root, training_dir)) != destination_root:
+        raise ValueError(f"Refusing to remove training data outside {destination_root}.")
+    if not os.path.exists(training_dir):
+        logger.info(f"No training data removed because {training_dir} does not exist.")
+        return False
+    if os.path.islink(training_dir) or not os.path.isdir(training_dir):
+        logger.warning(
+            f"Training cleanup skipped because {training_dir} is not a regular directory."
+        )
+        return False
+
+    shutil.rmtree(training_dir)
+    logger.info(
+        f"Removed training data folder {training_dir}. "
+        f"Intermediate data below {destination_root} was kept."
+    )
+    return True
+
+
 def cleanup_pipeline_outputs(configs):
     """Run post-pipeline cleanup for configs that explicitly requested it."""
     logger = logging.getLogger(__name__)
     cleaned_sources = set()
     cleaned_metadata_roots = set()
+    cleaned_training_roots = set()
     for config in configs:
         if getattr(config, "remove_src_files_after_pipeline", False):
             src_dir = os.path.abspath(config.src_dir)
             if src_dir not in cleaned_sources:
                 cleanup_source_files_after_pipeline(src_dir, logger)
                 cleaned_sources.add(src_dir)
+
+        if getattr(config, "remove_training_after_pipeline", False):
+            dst_dir = os.path.abspath(config.dst_dir)
+            if dst_dir not in cleaned_training_roots:
+                cleanup_training_after_pipeline(dst_dir, logger)
+                cleaned_training_roots.add(dst_dir)
 
         cleanup_roots = [
             (

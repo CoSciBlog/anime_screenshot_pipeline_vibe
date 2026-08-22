@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.6 - 2026-08-23
+
+### Added
+
+- Added the opt-in `--remove_training_after_pipeline` cleanup setting. It removes only the complete `dst/training` tree after every selected pipeline stage finishes successfully and explicitly preserves `dst/intermediate` with its sorted images.
+- Added regression coverage for successful training cleanup, missing training folders, preserved intermediate data, saved Gradio configuration, and complete English/German setting guidance.
+
+### Changed
+
+- Reorganized the Gradio interface into dedicated **Pipeline** and **App settings** pages, with language, workspace, import, export, and server controls on the settings page.
+- Completed concise English and German explanations for every visible pipeline setting and clarified destructive cleanup behavior throughout the UI.
+- Updated the package version to `0.0.6`.
+
 ## 0.0.5 - 2026-08-21
 
 ### Fixed
